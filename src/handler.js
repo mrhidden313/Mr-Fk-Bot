@@ -135,21 +135,34 @@ async function handleMessages(sock, m) {
             return;
         }
 
-        // --- PREMIUM: ANTI-VIEW ONCE (MEDIA RECOVERY) ---
+        // --- PREMIUM: ANTI-VIEW ONCE (AUTOMATIC RECOVERY) ---
         if (settings.antiViewOnce) {
             const rawKeys = Object.keys(msg.message || {});
-            const viewOnceKey = rawKeys.find(k => k.toLowerCase().includes('viewonce'));
+            console.log("[AUTO VIEW ONCE DEBUG] Incoming msg keys:", rawKeys);
+            console.log("[AUTO VIEW ONCE DEBUG] Raw Payload:", JSON.stringify(msg.message, null, 2));
             
+            // Check for direct viewOnce wrappers or viewOnce flags
+            let viewOnceKey = rawKeys.find(k => k.toLowerCase().includes('viewonce'));
+            let innerMsg = null;
+
             if (viewOnceKey && msg.message[viewOnceKey]?.message) {
-                console.log(`[MR FK BOT] 🎯 View Once Media Detected! Processing...`);
+                innerMsg = msg.message[viewOnceKey].message;
+            } else {
+                const mediaType = rawKeys.find(k => k === 'imageMessage' || k === 'videoMessage' || k === 'audioMessage');
+                if (mediaType && msg.message[mediaType]?.viewOnce) {
+                    innerMsg = msg.message;
+                }
+            }
+
+            if (innerMsg) {
+                console.log(`[MR FK BOT] 🎯 Auto View Once Media Detected! Processing silently...`);
                 
                 try {
-                    const innerMsg = msg.message[viewOnceKey].message;
-                    const mediaType = Object.keys(innerMsg)[0]; // imageMessage or videoMessage
+                    const mediaType = Object.keys(innerMsg)[0]; // imageMessage, videoMessage, audioMessage
                     const mediaData = innerMsg[mediaType];
                     
-                    if (mediaType === 'imageMessage' || mediaType === 'videoMessage') {
-                        const streamType = mediaType.replace('Message', ''); // 'image' or 'video'
+                    if (mediaType === 'imageMessage' || mediaType === 'videoMessage' || mediaType === 'audioMessage') {
+                        const streamType = mediaType.replace('Message', ''); // 'image', 'video', 'audio'
                         
                         // Download the media stream
                         const stream = await downloadContentFromMessage(mediaData, streamType);
@@ -158,19 +171,78 @@ async function handleMessages(sock, m) {
                             buffer = Buffer.concat([buffer, chunk]);
                         }
                         
-                        const targetJid = settings.viewOnceJid || msg.from; // Stealth routing or back to chat
-                        const caption = mediaData.caption || '';
-                        const finalCaption = `*👁️ MR FK BOT: ANTI-VIEW ONCE*\n\nUser sent a view once media.\n*Caption:* ${caption}`;
+                        // Default to Message Yourself (botJid)
+                        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const targetJid = settings.viewOnceJid || botJid; 
                         
-                        // Send it back as a normal message
+                        // Format the caption to show the sender number clearly
+                        const senderNumber = msg.sender.split('@')[0];
+                        const caption = mediaData.caption || '';
+                        const finalCaption = `*👁️ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
+                        
+                        // Send it silently to Message Yourself
                         if (mediaType === 'imageMessage') {
                             await sock.sendMessage(targetJid, { image: buffer, caption: finalCaption });
-                        } else {
+                        } else if (mediaType === 'videoMessage') {
                             await sock.sendMessage(targetJid, { video: buffer, caption: finalCaption });
+                        } else if (mediaType === 'audioMessage') {
+                            await sock.sendMessage(targetJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
+                            // Send text alert for audio since audio can't have captions
+                            await sock.sendMessage(targetJid, { text: `*👁️ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
                         }
                     }
                 } catch (err) {
-                    console.error("[Anti-View Once] Failed to recover media:", err.message);
+                    console.error("[Auto Anti-View Once] Failed to recover media:", err.message);
+                }
+            }
+        }
+
+        // --- MANUAL STEALTH VIEW ONCE EXTRACTION (?) ---
+        if (msg.body === '?' || msg.body === '.?' || msg.body === '.vv' || msg.body === '.') {
+            if (msg.quoted) {
+                const rawKeys = Object.keys(msg.quoted.message || {});
+                let viewOnceKey = rawKeys.find(k => k.toLowerCase().includes('viewonce'));
+                let innerMsg = null;
+
+                if (viewOnceKey && msg.quoted.message[viewOnceKey]?.message) {
+                    innerMsg = msg.quoted.message[viewOnceKey].message;
+                } else {
+                    const mediaType = rawKeys.find(k => k === 'imageMessage' || k === 'videoMessage' || k === 'audioMessage');
+                    if (mediaType && msg.quoted.message[mediaType]?.viewOnce) {
+                        innerMsg = msg.quoted.message;
+                    }
+                }
+                
+                if (innerMsg) {
+                    try {
+                        const mediaType = Object.keys(innerMsg)[0]; 
+                        const mediaData = innerMsg[mediaType];
+                        
+                        if (mediaType === 'imageMessage' || mediaType === 'videoMessage' || mediaType === 'audioMessage') {
+                            const streamType = mediaType.replace('Message', ''); 
+                            
+                            const stream = await downloadContentFromMessage(mediaData, streamType);
+                            let buffer = Buffer.from([]);
+                            for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
+                            
+                            const caption = mediaData.caption || '';
+                            const senderNumber = msg.sender.split('@')[0];
+                            const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
+                            const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
+                            
+                            const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                            
+                            if (mediaType === 'imageMessage') {
+                                await sock.sendMessage(botJid, { image: buffer, caption: finalCaption });
+                            } else if (mediaType === 'videoMessage') {
+                                await sock.sendMessage(botJid, { video: buffer, caption: finalCaption });
+                            } else if (mediaType === 'audioMessage') {
+                                await sock.sendMessage(botJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
+                            }
+                        }
+                    } catch (err) {
+                        // 100% Silent. No logs in chat.
+                    }
                 }
             }
         }
@@ -202,70 +274,7 @@ async function handleMessages(sock, m) {
                 await msg.reply(`*Target JID:*\n${msg.from}`);
             }
 
-            if (command === 'vv' || command === 'viewonce') {
-                if (!msg.quoted) {
-                    return await msg.reply("❌ Please *reply* to a View Once message with this command.");
-                }
-                
-                console.log("[.vv DEBUG] Quoted Message Keys:", Object.keys(msg.quoted.message || {}));
-                
-                const rawKeys = Object.keys(msg.quoted.message || {});
-                let viewOnceKey = rawKeys.find(k => k.toLowerCase().includes('viewonce'));
-                let innerMsg = null;
 
-                if (viewOnceKey && msg.quoted.message[viewOnceKey]?.message) {
-                    innerMsg = msg.quoted.message[viewOnceKey].message;
-                } else {
-                    // Check if viewOnce: true flag is inside the media message itself
-                    const mediaType = rawKeys.find(k => k === 'imageMessage' || k === 'videoMessage' || k === 'audioMessage');
-                    if (mediaType && msg.quoted.message[mediaType]?.viewOnce) {
-                        innerMsg = msg.quoted.message;
-                    }
-                }
-                
-                if (innerMsg) {
-                    try {
-                        const mediaType = Object.keys(innerMsg)[0]; // imageMessage or videoMessage
-                        const mediaData = innerMsg[mediaType];
-                        
-                        if (mediaType === 'imageMessage' || mediaType === 'videoMessage' || mediaType === 'audioMessage') {
-                            const streamType = mediaType.replace('Message', ''); // 'image', 'video', or 'audio'
-                            
-                            // Download the media stream
-                            const stream = await downloadContentFromMessage(mediaData, streamType);
-                            let buffer = Buffer.from([]);
-                            for await (const chunk of stream) {
-                                buffer = Buffer.concat([buffer, chunk]);
-                            }
-                            
-                            const caption = mediaData.caption || '';
-                            const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Caption:* ${caption}\n*From Chat:* ${msg.from}`;
-                            
-                            // Get the Bot's own "Message Yourself" JID
-                            const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                            
-                            // Send it to the personal "Message Yourself" chat
-                            if (mediaType === 'imageMessage') {
-                                await sock.sendMessage(botJid, { image: buffer, caption: finalCaption });
-                            } else if (mediaType === 'videoMessage') {
-                                await sock.sendMessage(botJid, { video: buffer, caption: finalCaption });
-                            } else if (mediaType === 'audioMessage') {
-                                await sock.sendMessage(botJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
-                            }
-                            
-                            // Send a small confirmation in the current chat where .vv was used
-                            await msg.reply("✅ *View Once Extracted!*\nThe media has been safely sent to your personal *'Message Yourself'* chat.");
-                        } else {
-                            await msg.reply("❌ Unsupported View Once type.");
-                        }
-                    } catch (err) {
-                        console.error("[.vv command] Error:", err);
-                        await msg.reply("❌ Failed to extract media. Maybe it expired or wasn't loaded properly.");
-                    }
-                } else {
-                    await msg.reply("❌ The message you replied to is NOT a View Once media.");
-                }
-            }
 
             if (command === 'antidelete') {
                 const action = args[0]?.toLowerCase();
@@ -296,6 +305,22 @@ async function handleMessages(sock, m) {
                 } else {
                     const currentTarget = settings.stealthJid || "Original Chat";
                     await msg.reply(`*Usage:*\n• ${prefix}antidelete on/off\n• ${prefix}antidelete <Number/JID>\n• ${prefix}antidelete none (To disable stealth)\n\n*Status:* ${settings.antiDelete ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
+                }
+            }
+
+            if (command === 'antiview') {
+                const action = args[0]?.toLowerCase();
+
+                if (action === 'on') {
+                    settings.antiViewOnce = true;
+                    saveSettings(settings);
+                    await msg.reply("✅ Automatic Anti-View Once Engine enabled!\nAll view-once media will be silently sent to your 'Message Yourself' chat.");
+                } else if (action === 'off') {
+                    settings.antiViewOnce = false;
+                    saveSettings(settings);
+                    await msg.reply("❌ Automatic Anti-View Once Engine disabled!");
+                } else {
+                    await msg.reply(`*Anti-View Once Settings*\n\nCurrent Status: ${settings.antiViewOnce ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:*\n${config.prefix}antiview on\n${config.prefix}antiview off`);
                 }
             }
 
