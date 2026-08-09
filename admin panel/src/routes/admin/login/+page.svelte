@@ -57,11 +57,11 @@
         <div class="space-y-4">
             <div>
                 <label for="email" class="block text-sm font-medium text-slate-300">Admin Email</label>
-                <input id="email" bind:value={email} type="email" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200" placeholder="mrhiddenhacker313@gmail.com">
+                <input id="email" bind:value={email} type="email" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200">
             </div>
             <div>
                 <label for="password" class="block text-sm font-medium text-slate-300">Master Password</label>
-                <input id="password" bind:value={password} type="password" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200" placeholder="••••••••">
+                <input id="password" bind:value={password} type="password" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200">
             </div>
         </div>
 
