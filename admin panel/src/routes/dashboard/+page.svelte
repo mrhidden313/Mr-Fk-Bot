@@ -8,7 +8,7 @@
     let loading = true;
     let pollInterval = null;
 
-    const API_URL = 'http://localhost:3000/api';
+    const API_URL = 'https://162.35.171.126.nip.io/api';
 
     onMount(() => {
         token = localStorage.getItem('userToken'); // This acts as their unique Session ID in our SaaS

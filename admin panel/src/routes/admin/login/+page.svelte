@@ -7,8 +7,8 @@
     let error = '';
     let loading = false;
 
-    // Hardcoded API URL for now, will use env variables in production
-    const API_URL = 'http://localhost:3000/api';
+    // Production HTTPS endpoint
+    const API_URL = 'https://162.35.171.126.nip.io/api';
 
     async function handleLogin() {
         loading = true;
