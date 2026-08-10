@@ -1,7 +1,7 @@
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const { handleMessages } = require('./handler');
-const { useMongoDBAuthState } = require('./mongoAuth');
+const { useMongoDBAuthState, AuthModel } = require('./mongoAuth');
 const ChatMessage = require('./models/ChatMessage');
 
 // Map of sessionId → active socket
@@ -73,6 +73,9 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
 
             if (shouldReconnect) {
                 setTimeout(() => startBot(sessionId, onQRUpdate, onStatusUpdate), 5000);
+            } else {
+                console.log(`[Session ${sessionId}] Logged out. Clearing auth state.`);
+                AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to clear auth:', e));
             }
         } else if (connection === 'open') {
             console.log(`✅ [Session ${sessionId}] Connected!`);
