@@ -138,6 +138,14 @@
         actionLoading = false;
     }
 
+    let copied = $state(false);
+    function copyCode() {
+        if (!pairingCodeStr) return;
+        navigator.clipboard.writeText(pairingCodeStr.match(/.{1,4}/g)?.join('-') || pairingCodeStr);
+        copied = true;
+        setTimeout(() => copied = false, 2000);
+    }
+
     function logout() {
         stopPolling();
         localStorage.removeItem('userToken');
@@ -220,7 +228,12 @@
         {:else if status === 'pairing_code' && pairingCodeStr}
             <div class="state-view">
                 <h2>Pairing Code</h2>
-                <div class="pairing-code-display">{pairingCodeStr.match(/.{1,4}/g)?.join('-') || pairingCodeStr}</div>
+                <div class="pairing-code-wrapper">
+                    <div class="pairing-code-display">{pairingCodeStr.match(/.{1,4}/g)?.join('-') || pairingCodeStr}</div>
+                    <button class="btn btn-primary btn-copy" onclick={copyCode}>
+                        {copied ? 'Copied! ✓' : 'Copy'}
+                    </button>
+                </div>
                 <p>Open WhatsApp > Linked Devices > Link with Phone Number</p>
                 <div class="qr-timer"><span class="dot-blink"></span> Waiting for confirmation...</div>
                 <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
@@ -325,5 +338,7 @@
     .phone-input-styled { padding: 0.75rem; border-radius: 0 8px 8px 0; border: 1px solid #334155; background: #0f172a; color: #f8fafc; width: 100%; max-width: 220px; text-align: left; font-size: 1.1rem; outline: none; transition: 0.2s; }
     .phone-input-styled:focus { border-color: #14b8a6; }
     
-    .pairing-code-display { font-size: 3rem; font-weight: 800; letter-spacing: 8px; padding: 1.5rem 2rem; background: linear-gradient(135deg, #0f172a, #1e293b); border-radius: 12px; border: 2px solid #14b8a6; color: #14b8a6; margin: 1.5rem 0; text-align: center; font-family: monospace; box-shadow: 0 0 20px rgba(20,184,166,0.2); text-shadow: 0 0 10px rgba(20,184,166,0.4); }
+    .pairing-code-wrapper { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin: 1.5rem 0; }
+    .pairing-code-display { font-size: 3rem; font-weight: 800; letter-spacing: 8px; padding: 1.5rem 2rem; background: linear-gradient(135deg, #0f172a, #1e293b); border-radius: 12px; border: 2px solid #14b8a6; color: #14b8a6; text-align: center; font-family: monospace; box-shadow: 0 0 20px rgba(20,184,166,0.2); text-shadow: 0 0 10px rgba(20,184,166,0.4); margin: 0; }
+    .btn-copy { font-size: 0.9rem; padding: 0.5rem 1.5rem; }
 </style>

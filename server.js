@@ -286,6 +286,11 @@ app.post('/api/sessions/start', async (req, res) => {
         return res.status(400).json({ error: 'Session is already active.' });
     }
 
+    // Force a fresh auth state if they are explicitly requesting a pairing code
+    if (phoneNumber) {
+        await AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to reset auth:', e));
+    }
+
     sessionStatuses.set(sessionId, 'starting');
 
     startBot(
