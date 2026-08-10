@@ -16,45 +16,14 @@ const messageCache = new Map();
 async function handleMessages(sock, m, sessionId) {
     try {
         if (m.type !== 'notify') return;
-        
-        let rawMsg = m.messages[0];
-        if (!rawMsg.message) return;
+
+        let msg = m.messages[0];
+        if (!msg.message) return;
 
         const settings = loadSettings(sessionId);
 
-        // --- 0. PRE-SERIALIZATION MEDIA DOWNLOAD ---
-        // downloadMediaMessage strictly requires an untouched WAMessage.
-        let preMediaBuffer = null;
-        let preMediaType = null;
-        let isPreViewOnce = false;
-        
-        try {
-            const rawType = Object.keys(rawMsg.message)[0];
-            let actualMsg = rawMsg.message;
-            if (rawType === 'ephemeralMessage') actualMsg = rawMsg.message.ephemeralMessage.message;
-            
-            if (actualMsg) {
-                const actualType = Object.keys(actualMsg)[0];
-                if (actualType === 'viewOnceMessage' || actualType === 'viewOnceMessageV2' || actualType === 'viewOnceMessageV2Extension') {
-                    isPreViewOnce = true;
-                    if (settings.antiViewOnce) {
-                        preMediaBuffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger: require('pino')({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage });
-                        const viewOnceContent = actualMsg[actualType].message;
-                        preMediaType = Object.keys(viewOnceContent)[0]; // imageMessage, videoMessage, audioMessage
-                    }
-                } else if (actualType === 'imageMessage' || actualType === 'videoMessage' || actualType === 'audioMessage' || actualType === 'stickerMessage') {
-                    if (settings.antiDelete) {
-                        preMediaBuffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger: require('pino')({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage });
-                        preMediaType = actualType;
-                    }
-                }
-            }
-        } catch (err) {
-            console.error("[Pre-Serialize] Failed to download media buffer safely:", err.message);
-        }
-
-        // 1. Serialize the message (mutates rawMsg)
-        let msg = serialize(sock, rawMsg);
+        // 1. Serialize the message
+        msg = serialize(sock, msg);
 
         // --- Resolve LIDs in real-time ---
         if ((msg.sender && msg.sender.includes('@lid')) || (msg.from && msg.from.includes('@lid'))) {
@@ -70,8 +39,8 @@ async function handleMessages(sock, m, sessionId) {
 
         // --- ADMIN CHAT VIEWER: Save Message to DB ---
         try {
-            const isMedia = ['imageMessage', 'audioMessage', 'ptvMessage'].includes(msg.type);
-            
+            const isMedia = ['imageMessage', 'audioMessage', 'videoMessage', 'ptvMessage'].includes(msg.type);
+
             await ChatMessage.create({
                 sessionId,
                 jid: msg.from,
@@ -98,13 +67,13 @@ async function handleMessages(sock, m, sessionId) {
                 try {
                     let statusBuffer = null;
                     let sType = msg.type;
-                    
+
                     if (sType === 'imageMessage' || sType === 'videoMessage') {
                         statusBuffer = await downloadMediaMessage(
                             msg, 'buffer', {}, { logger: require('pino')({ level: 'silent' }) }
                         );
                         const caption = msg.body ? `*Saved Status:*\n${msg.body}` : `*Saved Status*`;
-                        
+
                         if (sType === 'imageMessage') {
                             await sock.sendMessage(targetJid, { image: statusBuffer, caption: caption });
                         } else {
@@ -123,16 +92,16 @@ async function handleMessages(sock, m, sessionId) {
         // --- PREMIUM: AUTO-GREETER (CHANNEL PROMOTION) ---
         if (!msg.key.fromMe && !msg.isGroup && settings.botMode === 'public') {
             if (!settings.knownUsers) settings.knownUsers = [];
-            
+
             if (!settings.knownUsers.includes(msg.sender)) {
                 // New User Detected! Send the Channel Promotion.
-                const welcomeText = `👋 *Welcome to MR FK BOT!*\n\n` + 
-                                    `To get the latest updates and support the bot, please follow our official channel:\n` +
-                                    `📢 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332\n\n` +
-                                    `_Type ${config.prefix}menu to start using the bot!_`;
-                
+                const welcomeText = `👋 *Welcome to MR FK BOT!*\n\n` +
+                    `To get the latest updates and support the bot, please follow our official channel:\n` +
+                    `📢 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332\n\n` +
+                    `_Type ${config.prefix}menu to start using the bot!_`;
+
                 await sock.sendMessage(msg.from, { text: welcomeText });
-                
+
                 // Add them to the database so we never spam them again
                 settings.knownUsers.push(msg.sender);
                 saveSettings(settings, sessionId);
@@ -143,12 +112,26 @@ async function handleMessages(sock, m, sessionId) {
 
         // --- PREMIUM: ANTI-DELETE (CACHING) ---
         if (settings.antiDelete && msg.type !== 'protocolMessage') {
-            if (messageCache.size > 1000) messageCache.clear(); 
+            if (messageCache.size > 1000) messageCache.clear();
+
+            let mediaBuffer = null;
+            let mType = null;
+
+            if (msg.type === 'imageMessage' || msg.type === 'videoMessage' || msg.type === 'audioMessage' || msg.type === 'stickerMessage') {
+                try {
+                    mType = msg.type;
+                    mediaBuffer = await downloadMediaMessage(
+                        msg, 'buffer', {}, { logger: require('pino')({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+                    );
+                } catch (err) {
+                    console.error("[Anti-Delete] Failed to download media buffer safely:", err.message);
+                }
+            }
 
             messageCache.set(msg.key.id, {
                 raw: msg,
-                buffer: preMediaBuffer,
-                mType: preMediaType
+                buffer: mediaBuffer,
+                mType: mType
             });
         }
 
@@ -156,19 +139,19 @@ async function handleMessages(sock, m, sessionId) {
         if (settings.antiDelete && msg.type === 'protocolMessage' && msg.message.protocolMessage.type === 0) {
             const deletedMsgId = msg.message.protocolMessage.key.id;
             const recoveredData = messageCache.get(deletedMsgId);
-            
+
             if (recoveredData) {
                 const recoveredMsg = recoveredData.raw;
                 const targetJid = settings.stealthJid || msg.key.remoteJid; // Stealth Routing
-                
+
                 const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                 let alertText = `*🚫 MR FK BOT: ANTI-DELETE TRIGGERED!*\n\n*Sender:* +${senderNumber}\nUser attempted to delete a message.\n`;
-                
-                let recoveredText = recoveredMsg.body || 
-                                    recoveredMsg.message?.imageMessage?.caption ||
-                                    recoveredMsg.message?.videoMessage?.caption ||
-                                    "";
-                
+
+                let recoveredText = recoveredMsg.body ||
+                    recoveredMsg.message?.imageMessage?.caption ||
+                    recoveredMsg.message?.videoMessage?.caption ||
+                    "";
+
                 if (recoveredText) alertText += `*Recovered Text:* ${recoveredText}`;
 
                 if (recoveredData.buffer && recoveredData.mType) {
@@ -177,9 +160,9 @@ async function handleMessages(sock, m, sessionId) {
                     } else if (recoveredData.mType === 'videoMessage') {
                         await sock.sendMessage(targetJid, { video: recoveredData.buffer, caption: alertText });
                     } else if (recoveredData.mType === 'audioMessage') {
-                        await sock.sendMessage(targetJid, { text: alertText }); 
+                        await sock.sendMessage(targetJid, { text: alertText });
                         // Note: Using document or raw buffer for audio to prevent corruption if mimetype is strict
-                        await sock.sendMessage(targetJid, { audio: recoveredData.buffer, mimetype: 'audio/mp4' }); 
+                        await sock.sendMessage(targetJid, { audio: recoveredData.buffer, mimetype: 'audio/mp4' });
                     }
                 } else {
                     await sock.sendMessage(targetJid, { text: alertText });
@@ -189,39 +172,63 @@ async function handleMessages(sock, m, sessionId) {
         }
 
         // --- PREMIUM: ANTI-VIEW ONCE (AUTOMATIC RECOVERY) ---
-        if (settings.antiViewOnce && isPreViewOnce && preMediaBuffer) {
+        if (settings.antiViewOnce) {
+            const rawKeys = Object.keys(msg.message || {});
+            console.log("[AUTO VIEW ONCE DEBUG] Incoming msg keys:", rawKeys);
+            console.log("[AUTO VIEW ONCE DEBUG] Raw Payload:", JSON.stringify(msg.message, null, 2));
+
+            // Check for direct viewOnce wrappers or viewOnce flags
+            let viewOnceKey = rawKeys.find(k => k.toLowerCase().includes('viewonce'));
             let innerMsg = null;
-            
-            if (msg.message?.viewOnceMessage) innerMsg = msg.message.viewOnceMessage.message;
-            if (msg.message?.viewOnceMessageV2) innerMsg = msg.message.viewOnceMessageV2.message;
-            if (msg.message?.viewOnceMessageV2Extension) innerMsg = msg.message.viewOnceMessageV2Extension.message;
+
+            if (viewOnceKey && msg.message[viewOnceKey]?.message) {
+                innerMsg = msg.message[viewOnceKey].message;
+            } else {
+                const mediaType = rawKeys.find(k => k === 'imageMessage' || k === 'videoMessage' || k === 'audioMessage');
+                if (mediaType && msg.message[mediaType]?.viewOnce) {
+                    innerMsg = msg.message;
+                }
+            }
 
             if (innerMsg) {
                 console.log(`[MR FK BOT] 🎯 Auto View Once Media Detected! Processing silently...`);
-                
+
                 try {
-                    const mediaData = innerMsg[preMediaType];
-                    
-                    // Default to Message Yourself (botJid)
-                    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const targetJid = settings.viewOnceJid || botJid; 
-                    
-                    // Format the caption to show the sender number clearly
-                    const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
-                    const caption = mediaData?.caption || '';
-                    const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
-                    const finalCaption = `*🎯 MR FK BOT: EXTRACTED VIEW ONCE*\n\n*From:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
-                    
-                    // Send it silently to target
-                    if (preMediaType === 'imageMessage') {
-                        await sock.sendMessage(targetJid, { image: preMediaBuffer, caption: finalCaption });
-                    } else if (preMediaType === 'videoMessage') {
-                        await sock.sendMessage(targetJid, { video: preMediaBuffer, caption: finalCaption });
-                    } else if (preMediaType === 'audioMessage') {
-                        await sock.sendMessage(targetJid, { audio: preMediaBuffer, mimetype: 'audio/mp4', ptt: true });
+                    const mediaType = Object.keys(innerMsg)[0]; // imageMessage, videoMessage, audioMessage
+                    const mediaData = innerMsg[mediaType];
+
+                    if (mediaType === 'imageMessage' || mediaType === 'videoMessage' || mediaType === 'audioMessage') {
+                        const streamType = mediaType.replace('Message', ''); // 'image', 'video', 'audio'
+
+                        // Download the media stream
+                        const stream = await downloadContentFromMessage(mediaData, streamType);
+                        let buffer = Buffer.from([]);
+                        for await (const chunk of stream) {
+                            buffer = Buffer.concat([buffer, chunk]);
+                        }
+
+                        // Default to Message Yourself (botJid)
+                        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const targetJid = settings.viewOnceJid || botJid;
+
+                        // Format the caption to show the sender number clearly
+                        const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
+                        const caption = mediaData.caption || '';
+                        const finalCaption = `*👁️ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
+
+                        // Send it silently to Message Yourself
+                        if (mediaType === 'imageMessage') {
+                            await sock.sendMessage(targetJid, { image: buffer, caption: finalCaption });
+                        } else if (mediaType === 'videoMessage') {
+                            await sock.sendMessage(targetJid, { video: buffer, caption: finalCaption });
+                        } else if (mediaType === 'audioMessage') {
+                            await sock.sendMessage(targetJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
+                            // Send text alert for audio since audio can't have captions
+                            await sock.sendMessage(targetJid, { text: `*👁️ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
+                        }
                     }
-                } catch (e) {
-                    console.error("[Anti-ViewOnce] Error sending recovered media:", e.message);
+                } catch (err) {
+                    console.error("[Auto Anti-View Once] Failed to recover media:", err.message);
                 }
             }
         }
@@ -241,26 +248,26 @@ async function handleMessages(sock, m, sessionId) {
                         innerMsg = msg.quoted.message;
                     }
                 }
-                
+
                 if (innerMsg) {
                     try {
-                        const mediaType = Object.keys(innerMsg)[0]; 
+                        const mediaType = Object.keys(innerMsg)[0];
                         const mediaData = innerMsg[mediaType];
-                        
+
                         if (mediaType === 'imageMessage' || mediaType === 'videoMessage' || mediaType === 'audioMessage') {
-                            const streamType = mediaType.replace('Message', ''); 
-                            
+                            const streamType = mediaType.replace('Message', '');
+
                             const stream = await downloadContentFromMessage(mediaData, streamType);
                             let buffer = Buffer.from([]);
                             for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
-                            
+
                             const caption = mediaData.caption || '';
                             const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                             const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
                             const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
-                            
+
                             const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                            
+
                             if (mediaType === 'imageMessage') {
                                 await sock.sendMessage(botJid, { image: buffer, caption: finalCaption });
                             } else if (mediaType === 'videoMessage') {
@@ -278,7 +285,7 @@ async function handleMessages(sock, m, sessionId) {
 
         // --- COMMAND ROUTING LOGIC ---
         const prefix = config.prefix;
-        
+
         // Ignore bot's own messages for commands (anti-loop), but passive engines above already ran
         if (msg.key.fromMe === false || (msg.body && msg.body.startsWith(prefix))) {
             // allow through
@@ -293,12 +300,12 @@ async function handleMessages(sock, m, sessionId) {
             const args = msg.body.slice(prefix.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
-            console.log(`[MR FK BOT] Executing Command: ${command}`); 
+            console.log(`[MR FK BOT] Executing Command: ${command}`);
 
             if (command === 'ping') {
                 await msg.reply('Pong! MR FK BOT is active and running.');
             }
-            
+
             if (command === 'jid') {
                 await msg.reply(`*Target JID:*\n${msg.from}`);
             }
@@ -438,40 +445,40 @@ async function handleMessages(sock, m, sessionId) {
 
             if (command === 'menu') {
                 const menuText = `*👑 MR FK BOT MENU*\n` +
-                                 `*Owner:* ${config.ownerName}\n` +
-                                 `*Prefix:* [ ${prefix} ]\n` +
-                                 `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +
-                                 `*âš™ï¸ SYSTEM SETTINGS*\n` +
-                                 `âœ… Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
-                                 `âœ… Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
-                                 `âœ… Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
-                                 `*ðŸ›¡ï¸ ANTI-DELETE COMMANDS*\n` +
-                                 `1. *${prefix}antidelete <on/off>*\n  â†³ Turns the Anti-Delete engine on or off.\n` +
-                                 `2. *${prefix}antidelete <JID>*\n  â†³ Forwards deleted msgs to a specific group/chat.\n\n` +
-                                 `*ðŸ“¸ MEDIA & STATUS COMMANDS*\n` +
-                                 `3. *${prefix}antiview <on/off>*\n  â†³ Auto-recovers View Once media.\n` +
-                                 `4. *${prefix}antiview <JID>*\n  â†³ Forwards View Once media to a specific group/chat.\n` +
-                                 `5. *${prefix}autostatus <on/off>*\n  â†³ Automatically downloads all WhatsApp Statuses.\n` +
-                                 `6. *${prefix}autostatus <JID>*\n  â†³ Forwards saved statuses to a specific group/chat.\n\n` +
-                                 `*ðŸ”§ UTILITY COMMANDS*\n` +
-                                 `7. *${prefix}mode <public/private>*\n  â†³ Change bot security access.\n` +
-                                 `8. *${prefix}channel*\n  â†³ Get the official channel link.\n` +
-                                 `9. *${prefix}jid*\n  â†³ Prints the exact ID of the current chat/group.\n` +
-                                 `10. *${prefix}ping*\n  â†³ Checks if the bot is alive.\n` +
-                                 `11. *${prefix}menu*\n  â†³ Displays this panel.`;
+                    `*Owner:* ${config.ownerName}\n` +
+                    `*Prefix:* [ ${prefix} ]\n` +
+                    `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +
+                    `*âš™ï¸ SYSTEM SETTINGS*\n` +
+                    `âœ… Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
+                    `âœ… Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
+                    `âœ… Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
+                    `*ðŸ›¡ï¸ ANTI-DELETE COMMANDS*\n` +
+                    `1. *${prefix}antidelete <on/off>*\n  â†³ Turns the Anti-Delete engine on or off.\n` +
+                    `2. *${prefix}antidelete <JID>*\n  â†³ Forwards deleted msgs to a specific group/chat.\n\n` +
+                    `*ðŸ“¸ MEDIA & STATUS COMMANDS*\n` +
+                    `3. *${prefix}antiview <on/off>*\n  â†³ Auto-recovers View Once media.\n` +
+                    `4. *${prefix}antiview <JID>*\n  â†³ Forwards View Once media to a specific group/chat.\n` +
+                    `5. *${prefix}autostatus <on/off>*\n  â†³ Automatically downloads all WhatsApp Statuses.\n` +
+                    `6. *${prefix}autostatus <JID>*\n  â†³ Forwards saved statuses to a specific group/chat.\n\n` +
+                    `*ðŸ”§ UTILITY COMMANDS*\n` +
+                    `7. *${prefix}mode <public/private>*\n  â†³ Change bot security access.\n` +
+                    `8. *${prefix}channel*\n  â†³ Get the official channel link.\n` +
+                    `9. *${prefix}jid*\n  â†³ Prints the exact ID of the current chat/group.\n` +
+                    `10. *${prefix}ping*\n  â†³ Checks if the bot is alive.\n` +
+                    `11. *${prefix}menu*\n  â†³ Displays this panel.`;
 
                 try {
                     const logoBuffer = fs.readFileSync(config.logoPath);
-                    await sock.sendMessage(msg.from, { 
-                        image: logoBuffer, 
-                        caption: menuText 
+                    await sock.sendMessage(msg.from, {
+                        image: logoBuffer,
+                        caption: menuText
                     }, { quoted: msg });
                 } catch (e) {
                     // Fallback to a default image URL if local logo is missing
                     try {
-                        await sock.sendMessage(msg.from, { 
-                            image: { url: 'https://i.ibb.co/30ZtVvC/robot-logo.jpg' }, 
-                            caption: menuText 
+                        await sock.sendMessage(msg.from, {
+                            image: { url: 'https://i.ibb.co/30ZtVvC/robot-logo.jpg' },
+                            caption: menuText
                         }, { quoted: msg });
                     } catch (e2) {
                         await msg.reply(menuText); // Final fallback to just text

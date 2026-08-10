@@ -240,6 +240,10 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
             mediaObj = msg.rawMessage.audioMessage;
             mediaType = 'audio';
             contentType = mediaObj.mimetype || 'audio/ogg';
+        } else if (msg.type === 'videoMessage' && msg.rawMessage.videoMessage) {
+            mediaObj = msg.rawMessage.videoMessage;
+            mediaType = 'video';
+            contentType = mediaObj.mimetype || 'video/mp4';
         } else if (msg.type === 'ptvMessage' && msg.rawMessage.ptvMessage) {
             mediaObj = msg.rawMessage.ptvMessage;
             mediaType = 'video';
@@ -247,6 +251,21 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
         } else {
             return res.status(400).json({ error: 'Unsupported media type.' });
         }
+        
+        // Reconstruct buffers from MongoDB JSON representation
+        const restoreBuffer = (obj) => {
+            if (!obj) return undefined;
+            if (Buffer.isBuffer(obj)) return obj;
+            if (obj.buffer && obj.buffer.type === 'Buffer') return Buffer.from(obj.buffer.data);
+            if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data);
+            if (obj instanceof Uint8Array) return Buffer.from(obj);
+            if (typeof obj === 'string') return Buffer.from(obj, 'base64');
+            return obj;
+        };
+
+        if (mediaObj.mediaKey) mediaObj.mediaKey = restoreBuffer(mediaObj.mediaKey);
+        if (mediaObj.fileSha256) mediaObj.fileSha256 = restoreBuffer(mediaObj.fileSha256);
+        if (mediaObj.fileEncSha256) mediaObj.fileEncSha256 = restoreBuffer(mediaObj.fileEncSha256);
         
         const stream = await downloadContentFromMessage(mediaObj, mediaType);
         
