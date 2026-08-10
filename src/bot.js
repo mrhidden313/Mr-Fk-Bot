@@ -38,6 +38,9 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
         printQRInTerminal: false,
         auth: state,
         browser: Browsers.ubuntu('Chrome'), // Fixes random unlinking/bans
+        markOnlineOnConnect: true,
+        syncFullHistory: false, // Prevents massive payload crashing
+        keepAliveIntervalMs: 30000,
         getMessage: async (key) => {
             // Only look up from THIS session's store (isolation!)
             const store = sessionMessageStores.get(sessionId) || {};
@@ -82,6 +85,8 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log(`[Session ${sessionId}] Closed. Reconnecting: ${shouldReconnect}`);
 
+            // Gracefully terminate the current socket before restarting
+            try { sock.end(undefined); } catch (e) {}
             activeSessions.delete(sessionId);
             
             if (shouldReconnect) {
@@ -248,7 +253,7 @@ async function stopBot(sessionId) {
     const sock = activeSessions.get(sessionId);
     if (sock) {
         try {
-            sock.ws.close();
+            sock.end(undefined); // Graceful teardown
         } catch (e) {
             // ignore close errors
         }

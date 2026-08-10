@@ -62,18 +62,35 @@ async function useMongoDBAuthState(sessionId) {
                     return data;
                 },
                 set: async (data) => {
-                    const tasks = [];
+                    const bulkOps = [];
                     for (const category in data) {
                         for (const id in data[category]) {
                             const value = data[category][id];
                             if (value) {
-                                tasks.push(writeData(category, id, value));
+                                const serialized = JSON.stringify(value, BufferJSON.replacer);
+                                bulkOps.push({
+                                    updateOne: {
+                                        filter: { sessionId, type: category, keyId: id },
+                                        update: { $set: { data: serialized } },
+                                        upsert: true
+                                    }
+                                });
                             } else {
-                                tasks.push(removeData(category, id));
+                                bulkOps.push({
+                                    deleteOne: {
+                                        filter: { sessionId, type: category, keyId: id }
+                                    }
+                                });
                             }
                         }
                     }
-                    await Promise.all(tasks);
+                    if (bulkOps.length > 0) {
+                        try {
+                            await AuthModel.bulkWrite(bulkOps, { ordered: false });
+                        } catch (err) {
+                            console.error(`[Session ${sessionId}] Bulk write error in auth:`, err);
+                        }
+                    }
                 }
             }
         },
