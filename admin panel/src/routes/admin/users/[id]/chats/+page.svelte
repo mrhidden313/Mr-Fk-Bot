@@ -188,7 +188,7 @@
                                     {#if msg.type === 'imageMessage'}
                                         {#if loadedImages[msg.messageId]}
                                             <div class="media-preview">
-                                                <img src="/api/media/{userId}/{msg.messageId}" alt="Image Attachment" />
+                                                <img src="/api/media/{userId}/{msg.messageId}" alt="Attachment preview" />
                                             </div>
                                         {:else}
                                             <!-- svelte-ignore a11y_click_events_have_key_events -->
