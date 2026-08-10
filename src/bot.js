@@ -1,4 +1,4 @@
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const { handleMessages } = require('./handler');
 const { useMongoDBAuthState, AuthModel } = require('./mongoAuth');
@@ -37,7 +37,7 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         auth: state,
-        browser: ['Ubuntu', 'Chrome', '20.0.04'], // Essential for pairing code
+        browser: Browsers.ubuntu('Chrome'), // Fixes random unlinking/bans
         getMessage: async (key) => {
             // Only look up from THIS session's store (isolation!)
             const store = sessionMessageStores.get(sessionId) || {};
