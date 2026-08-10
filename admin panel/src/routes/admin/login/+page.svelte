@@ -1,77 +1,215 @@
 <script>
     import { goto } from '$app/navigation';
-    import { onMount } from 'svelte';
 
     let email = '';
     let password = '';
     let error = '';
     let loading = false;
 
-    // Production HTTPS endpoint (proxied by vercel.json)
     const API_URL = '/api';
 
     async function handleLogin() {
         loading = true;
         error = '';
-        
+
         try {
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            
-            const data = await res.json();
-            
+
+            let data;
+            try { data = await res.json(); } catch { data = {}; }
+
             if (res.ok && data.role === 'admin') {
                 localStorage.setItem('adminToken', data.token);
                 goto('/admin/dashboard');
             } else {
-                error = data.error || 'Access Denied. Admin only.';
+                error = data.error || 'Invalid credentials.';
             }
         } catch (err) {
-            error = 'Could not connect to the server.';
+            error = 'Network error. Cannot reach server.';
         } finally {
             loading = false;
         }
     }
 </script>
 
-<div class="w-full max-w-md p-8 space-y-8 bg-[#1e293b]/80 backdrop-blur-xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-700/50 relative overflow-hidden">
-    <!-- Decorative gradient blob -->
-    <div class="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl"></div>
-    
-    <div class="relative z-10 text-center">
-        <h2 class="text-3xl font-bold tracking-tight text-white">Admin Command</h2>
-        <p class="mt-2 text-sm text-slate-400">Secure access to the MR FK engine core.</p>
+<div class="card">
+    <div class="card-glow"></div>
+
+    <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <h1>Admin Access</h1>
+        <p>MR FK Engine Control Panel</p>
     </div>
 
     {#if error}
-        <div class="relative z-10 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <div class="alert alert-error">
+            <span class="alert-icon">⚠</span>
             {error}
         </div>
     {/if}
 
-    <form class="relative z-10 mt-8 space-y-6" on:submit|preventDefault={handleLogin}>
-        <div class="space-y-4">
-            <div>
-                <label for="email" class="block text-sm font-medium text-slate-300">Admin Email</label>
-                <input id="email" bind:value={email} type="email" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200">
-            </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-slate-300">Master Password</label>
-                <input id="password" bind:value={password} type="password" required class="mt-1 block w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all duration-200">
-            </div>
+    <form on:submit|preventDefault={handleLogin} class="form">
+        <div class="field">
+            <label for="email">Admin Email</label>
+            <input
+                id="email"
+                type="email"
+                bind:value={email}
+                required
+                disabled={loading}
+                autocomplete="email"
+            />
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <input
+                id="password"
+                type="password"
+                bind:value={password}
+                required
+                disabled={loading}
+                autocomplete="current-password"
+            />
         </div>
 
-        <button type="submit" disabled={loading} class="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 focus:ring-offset-slate-900 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+        <button type="submit" class="btn btn-primary" disabled={loading}>
             {#if loading}
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Authenticating...
+                <span class="spinner"></span> Authenticating...
             {:else}
-                Bypass Security
+                Enter Control Panel
             {/if}
         </button>
     </form>
 </div>
+
+<style>
+    .card {
+        width: 100%;
+        max-width: 420px;
+        background: linear-gradient(135deg, #1a1f2e 0%, #161b27 100%);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 20px;
+        padding: 2.5rem;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.1);
+    }
+    .card-glow {
+        position: absolute;
+        top: -80px;
+        right: -80px;
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .brand {
+        text-align: center;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+    .brand-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+    .brand h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin: 0 0 0.25rem;
+        letter-spacing: -0.5px;
+    }
+    .brand p {
+        font-size: 0.875rem;
+        color: #64748b;
+        margin: 0;
+    }
+    .alert {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.875rem 1rem;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        margin-bottom: 1.25rem;
+        position: relative;
+        z-index: 1;
+    }
+    .alert-error {
+        background: rgba(239,68,68,0.1);
+        border: 1px solid rgba(239,68,68,0.3);
+        color: #f87171;
+    }
+    .alert-icon { font-size: 1rem; flex-shrink: 0; }
+    .form { position: relative; z-index: 1; }
+    .field {
+        margin-bottom: 1.25rem;
+    }
+    .field label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+        letter-spacing: 0.02em;
+    }
+    .field input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: rgba(15, 20, 40, 0.8);
+        border: 1px solid rgba(99,102,241,0.2);
+        border-radius: 10px;
+        color: #e2e8f0;
+        font-size: 0.9375rem;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        box-sizing: border-box;
+    }
+    .field input:focus {
+        border-color: rgba(99,102,241,0.6);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    .field input:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn {
+        width: 100%;
+        padding: 0.875rem 1.5rem;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .btn-primary {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(99,102,241,0.3);
+    }
+    .btn-primary:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(99,102,241,0.4);
+    }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
