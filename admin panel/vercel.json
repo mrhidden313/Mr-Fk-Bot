@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "https://162.35.171.126.nip.io/api/:match*"
+    }
+  ]
+}

@@ -9,7 +9,7 @@
     let creating = false;
     let message = '';
     
-    const API_URL = 'https://162.35.171.126.nip.io/api';
+    const API_URL = '/api';
     let token = '';
 
     onMount(async () => {

@@ -6,7 +6,7 @@
     let error = '';
     let loading = false;
 
-    const API_URL = 'https://162.35.171.126.nip.io/api';
+    const API_URL = '/api';
 
     async function handleLogin() {
         loading = true;
