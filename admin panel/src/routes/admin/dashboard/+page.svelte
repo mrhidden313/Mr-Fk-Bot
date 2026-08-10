@@ -236,8 +236,8 @@
                         <tbody>
                             {#each users as user}
                                 <tr onclick={() => openUserDetail(user)} class={selectedUser?._id === user._id ? 'active-row' : ''}>
-                                    <td class="em">{user.email}</td>
-                                    <td>
+                                    <td class="em" data-label="Client Email">{user.email}</td>
+                                    <td data-label="WhatsApp Status">
                                         {#if user.connectedNumber}
                                             {#if user.isOnline}
                                                 <span class="badge green">● Connected (Active)</span>
@@ -248,10 +248,10 @@
                                             <span class="badge gray">○ Not Linked</span>
                                         {/if}
                                     </td>
-                                    <td class="dim">
+                                    <td class="dim" data-label="Connected Number">
                                         {user.connectedNumber ? `+${user.connectedNumber}` : '—'}
                                     </td>
-                                    <td class="dim">{formatDate(user.createdAt)}</td>
+                                    <td class="dim" data-label="Created On">{formatDate(user.createdAt)}</td>
                                 </tr>
                             {/each}
                         </tbody>
@@ -468,4 +468,20 @@
     .spin { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; display: inline-block; }
     .spin-lg { width: 40px; height: 40px; border: 3px solid rgba(16,185,129,0.2); border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Mobile Responsiveness */
+    @media (max-width: 768px) {
+        .dashboard { padding: 0 1rem; }
+        .topbar { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        .topbar-right { width: 100%; justify-content: space-between; }
+        
+        table, thead, tbody, th, td, tr { display: block; }
+        thead tr { display: none; }
+        tr { margin-bottom: 1rem; border: 1px solid rgba(100,116,139,0.2); border-radius: 8px; padding: 1rem; background: rgba(30,41,59,0.3); }
+        td { border: none; padding: 0.5rem 0; display: flex; justify-content: space-between; align-items: center; text-align: right; border-bottom: 1px solid rgba(100,116,139,0.05); }
+        td:last-child { border-bottom: none; }
+        td::before { content: attr(data-label); font-weight: 600; color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; text-align: left; margin-right: 1rem; }
+        
+        .detail-panel { width: 100%; border-left: none; }
+    }
 </style>

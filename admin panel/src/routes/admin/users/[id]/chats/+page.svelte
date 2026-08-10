@@ -115,7 +115,7 @@
         <div style="width: 140px;"></div> <!-- Spacer -->
     </div>
 
-    <div class="chat-container">
+    <div class="chat-container {selectedJid ? 'chat-selected' : ''}">
         <!-- Sidebar: Chat List -->
         <div class="sidebar">
             <div class="sidebar-header">
@@ -163,6 +163,9 @@
                 </div>
             {:else}
                 <div class="chat-header">
+                    <button class="mobile-back" onclick={() => selectedJid = null} title="Back to chats">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
                     <div class="chat-avatar">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                     </div>
@@ -316,10 +319,19 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* Mobile Responsiveness */
+    .mobile-back { display: none; }
+    
     @media (max-width: 768px) {
         .chat-container { flex-direction: column; }
-        .sidebar { width: 100%; flex: 0 0 40%; border-right: none; border-bottom: 2px solid #10b981; }
-        .main-chat { flex: 0 0 60%; }
+        .sidebar { width: 100%; flex: 1; border-right: none; }
+        .main-chat { display: none; width: 100%; flex: 1; }
+        
+        /* Toggle layout on mobile */
+        .chat-selected .sidebar { display: none; }
+        .chat-selected .main-chat { display: flex; }
+        
+        .mobile-back { display: block; background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0 10px 0 0; }
+        
         .messages-area { padding: 1rem 3%; }
         .message-bubble { max-width: 90%; }
         .app-header { padding: 0.5rem 1rem; }
