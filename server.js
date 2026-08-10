@@ -186,10 +186,14 @@ app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
     
     try {
         const { id: userId, jid } = req.params;
+        console.log(`[DEBUG API] Fetching chats for user ${userId}, JID: ${jid}`);
+        
         const messagesDesc = await ChatMessage.find({ sessionId: userId, jid })
             .sort({ timestamp: -1 })
-            .limit(500); // Limit to last 500 messages to avoid overload
+            .limit(500) // Limit to last 500 messages to avoid overload
+            .lean();
             
+        console.log(`[DEBUG API] Found ${messagesDesc.length} messages for JID: ${jid}`);
         // Reverse them so oldest are first in the chat UI
         res.json({ messages: messagesDesc.reverse() });
     } catch (err) {
