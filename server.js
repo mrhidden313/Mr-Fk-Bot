@@ -374,6 +374,23 @@ app.post('/api/sessions/stop', async (req, res) => {
 mongoose.connect(MONGO_URI)
     .then(() => {
         console.log(`✅ Connected to MongoDB at ${MONGO_URI}`);
+        
+        // Auto-resume all active sessions
+        AuthModel.distinct('sessionId').then(async (sessionIds) => {
+            if (sessionIds && sessionIds.length > 0) {
+                console.log(`🔄 Auto-resuming ${sessionIds.length} active sessions...`);
+                for (const sid of sessionIds) {
+                    console.log(`- Resuming session: ${sid}`);
+                    startBot(sid).catch(e => console.error(`Failed to resume ${sid}:`, e));
+                    // 1 second delay between bootups to prevent connection flooding / rate limits
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                console.log(`✅ All saved sessions resumed successfully!`);
+            } else {
+                console.log(`ℹ️ No active sessions found in database.`);
+            }
+        }).catch(err => console.error("Error auto-resuming sessions:", err));
+
         app.listen(PORT, () => {
             console.log(`🚀 SaaS API Server running on http://localhost:${PORT}`);
             console.log(`📡 Admin: ${ADMIN_EMAIL}`);
