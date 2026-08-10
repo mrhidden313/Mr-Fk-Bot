@@ -1,4 +1,4 @@
-const { serialize } = require('./serialize');
+﻿const { serialize } = require('./serialize');
 const config = require('../config');
 const fs = require('fs');
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
@@ -11,14 +11,14 @@ const messageCache = new Map();
  * MR FK BOT - The Router
  * This handles all incoming messages, serializes them, and routes them to commands.
  */
-async function handleMessages(sock, m) {
+async function handleMessages(sock, m, sessionId) {
     try {
         if (m.type !== 'notify') return;
         
         let msg = m.messages[0];
         if (!msg.message) return;
 
-        const settings = loadSettings();
+        const settings = loadSettings(sessionId);
 
         // 1. Serialize the message
         msg = serialize(sock, msg);
@@ -60,16 +60,16 @@ async function handleMessages(sock, m) {
             
             if (!settings.knownUsers.includes(msg.sender)) {
                 // New User Detected! Send the Channel Promotion.
-                const welcomeText = `*👋 Welcome to MR FK BOT!*\n\n` + 
+                const welcomeText = `*ðŸ‘‹ Welcome to MR FK BOT!*\n\n` + 
                                     `To get the latest updates and support the bot, please follow our official channel:\n` +
-                                    `👉 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332\n\n` +
+                                    `ðŸ‘‰ https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332\n\n` +
                                     `_Type ${config.prefix}menu to start using the bot!_`;
                 
                 await sock.sendMessage(msg.from, { text: welcomeText });
                 
                 // Add them to the database so we never spam them again
                 settings.knownUsers.push(msg.sender);
-                saveSettings(settings);
+                saveSettings(settings, sessionId);
             }
         }
 
@@ -109,7 +109,7 @@ async function handleMessages(sock, m) {
                 const recoveredMsg = recoveredData.raw;
                 const targetJid = settings.stealthJid || msg.key.remoteJid; // Stealth Routing
                 
-                let alertText = `*🚫 MR FK BOT: ANTI-DELETE TRIGGERED!*\n\nUser attempted to delete a message.\n`;
+                let alertText = `*ðŸš« MR FK BOT: ANTI-DELETE TRIGGERED!*\n\nUser attempted to delete a message.\n`;
                 
                 let recoveredText = recoveredMsg.body || 
                                     recoveredMsg.message?.imageMessage?.caption ||
@@ -155,7 +155,7 @@ async function handleMessages(sock, m) {
             }
 
             if (innerMsg) {
-                console.log(`[MR FK BOT] 🎯 Auto View Once Media Detected! Processing silently...`);
+                console.log(`[MR FK BOT] ðŸŽ¯ Auto View Once Media Detected! Processing silently...`);
                 
                 try {
                     const mediaType = Object.keys(innerMsg)[0]; // imageMessage, videoMessage, audioMessage
@@ -178,7 +178,7 @@ async function handleMessages(sock, m) {
                         // Format the caption to show the sender number clearly
                         const senderNumber = msg.sender.split('@')[0];
                         const caption = mediaData.caption || '';
-                        const finalCaption = `*👁️ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
+                        const finalCaption = `*ðŸ‘ï¸ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
                         
                         // Send it silently to Message Yourself
                         if (mediaType === 'imageMessage') {
@@ -188,7 +188,7 @@ async function handleMessages(sock, m) {
                         } else if (mediaType === 'audioMessage') {
                             await sock.sendMessage(targetJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
                             // Send text alert for audio since audio can't have captions
-                            await sock.sendMessage(targetJid, { text: `*👁️ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
+                            await sock.sendMessage(targetJid, { text: `*ðŸ‘ï¸ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
                         }
                     }
                 } catch (err) {
@@ -228,7 +228,7 @@ async function handleMessages(sock, m) {
                             const caption = mediaData.caption || '';
                             const senderNumber = msg.sender.split('@')[0];
                             const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
-                            const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
+                            const finalCaption = `*ðŸ‘ï¸ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
                             
                             const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                             
@@ -281,30 +281,30 @@ async function handleMessages(sock, m) {
 
                 if (action === 'on') {
                     settings.antiDelete = true;
-                    saveSettings(settings);
-                    await msg.reply("✅ Anti-Delete Engine enabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âœ… Anti-Delete Engine enabled!");
                 } else if (action === 'off') {
                     settings.antiDelete = false;
-                    saveSettings(settings);
-                    await msg.reply("❌ Anti-Delete Engine disabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âŒ Anti-Delete Engine disabled!");
                 } else if (action === 'none' || action === 'null' || action === 'original') {
                     settings.stealthJid = null;
-                    saveSettings(settings);
-                    await msg.reply("🥷 Stealth Mode disabled. Recovered messages will be sent back to the original chat.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("ðŸ¥· Stealth Mode disabled. Recovered messages will be sent back to the original chat.");
                 } else if (action) {
                     let jid = args[0];
                     if (jid.includes('@lid')) {
-                        return await msg.reply("❌ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
+                        return await msg.reply("âŒ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
                     }
                     if (!jid.includes('@')) {
                         jid = jid.includes('-') ? `${jid}@g.us` : `${jid}@s.whatsapp.net`;
                     }
                     settings.stealthJid = jid;
-                    saveSettings(settings);
-                    await msg.reply(`✅ Anti-Delete Routing Set!\nRecovered messages will now be secretly forwarded to:\n${jid}`);
+                    saveSettings(settings, sessionId);
+                    await msg.reply(`âœ… Anti-Delete Routing Set!\nRecovered messages will now be secretly forwarded to:\n${jid}`);
                 } else {
                     const currentTarget = settings.stealthJid || "Original Chat";
-                    await msg.reply(`*Usage:*\n• ${prefix}antidelete on/off\n• ${prefix}antidelete <Number/JID>\n• ${prefix}antidelete none (To disable stealth)\n\n*Status:* ${settings.antiDelete ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
+                    await msg.reply(`*Usage:*\nâ€¢ ${prefix}antidelete on/off\nâ€¢ ${prefix}antidelete <Number/JID>\nâ€¢ ${prefix}antidelete none (To disable stealth)\n\n*Status:* ${settings.antiDelete ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
                 }
             }
 
@@ -313,14 +313,14 @@ async function handleMessages(sock, m) {
 
                 if (action === 'on') {
                     settings.antiViewOnce = true;
-                    saveSettings(settings);
-                    await msg.reply("✅ Automatic Anti-View Once Engine enabled!\nAll view-once media will be silently sent to your 'Message Yourself' chat.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âœ… Automatic Anti-View Once Engine enabled!\nAll view-once media will be silently sent to your 'Message Yourself' chat.");
                 } else if (action === 'off') {
                     settings.antiViewOnce = false;
-                    saveSettings(settings);
-                    await msg.reply("❌ Automatic Anti-View Once Engine disabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âŒ Automatic Anti-View Once Engine disabled!");
                 } else {
-                    await msg.reply(`*Anti-View Once Settings*\n\nCurrent Status: ${settings.antiViewOnce ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:*\n${config.prefix}antiview on\n${config.prefix}antiview off`);
+                    await msg.reply(`*Anti-View Once Settings*\n\nCurrent Status: ${settings.antiViewOnce ? 'ON âœ…' : 'OFF âŒ'}\n\n*Usage:*\n${config.prefix}antiview on\n${config.prefix}antiview off`);
                 }
             }
 
@@ -329,30 +329,30 @@ async function handleMessages(sock, m) {
 
                 if (action === 'on') {
                     settings.autoStatus = true;
-                    saveSettings(settings);
-                    await msg.reply("✅ Auto-Status Saver enabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âœ… Auto-Status Saver enabled!");
                 } else if (action === 'off') {
                     settings.autoStatus = false;
-                    saveSettings(settings);
-                    await msg.reply("❌ Auto-Status Saver disabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âŒ Auto-Status Saver disabled!");
                 } else if (action === 'none' || action === 'null') {
                     settings.statusJid = null;
-                    saveSettings(settings);
-                    await msg.reply("❌ Status routing removed.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âŒ Status routing removed.");
                 } else if (action) {
                     let jid = args[0];
                     if (jid.includes('@lid')) {
-                        return await msg.reply("❌ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
+                        return await msg.reply("âŒ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
                     }
                     if (!jid.includes('@')) {
                         jid = jid.includes('-') ? `${jid}@g.us` : `${jid}@s.whatsapp.net`;
                     }
                     settings.statusJid = jid;
-                    saveSettings(settings);
-                    await msg.reply(`✅ Auto-Status Routing Set!\nStatuses will now be saved to:\n${jid}`);
+                    saveSettings(settings, sessionId);
+                    await msg.reply(`âœ… Auto-Status Routing Set!\nStatuses will now be saved to:\n${jid}`);
                 } else {
                     const currentTarget = settings.statusJid || "Original Chat";
-                    await msg.reply(`*Usage:*\n• ${prefix}autostatus on/off\n• ${prefix}autostatus <Number/JID>\n\n*Status:* ${settings.autoStatus ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
+                    await msg.reply(`*Usage:*\nâ€¢ ${prefix}autostatus on/off\nâ€¢ ${prefix}autostatus <Number/JID>\n\n*Status:* ${settings.autoStatus ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
                 }
             }
 
@@ -361,30 +361,30 @@ async function handleMessages(sock, m) {
 
                 if (action === 'on') {
                     settings.antiViewOnce = true;
-                    saveSettings(settings);
-                    await msg.reply("✅ Anti-View Once enabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âœ… Anti-View Once enabled!");
                 } else if (action === 'off') {
                     settings.antiViewOnce = false;
-                    saveSettings(settings);
-                    await msg.reply("❌ Anti-View Once disabled!");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("âŒ Anti-View Once disabled!");
                 } else if (action === 'none' || action === 'null' || action === 'original') {
                     settings.viewOnceJid = null;
-                    saveSettings(settings);
-                    await msg.reply("🥷 View Once Stealth disabled. Recovered media will be sent back to the original chat.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("ðŸ¥· View Once Stealth disabled. Recovered media will be sent back to the original chat.");
                 } else if (action) {
                     let jid = args[0];
                     if (jid.includes('@lid')) {
-                        return await msg.reply("❌ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
+                        return await msg.reply("âŒ **ERROR:** You cannot route messages to an `@lid` (Linked Device). WhatsApp blocks media forwarding to `@lid` addresses.\n\nPlease use your actual phone number (e.g., `923001234567`).");
                     }
                     if (!jid.includes('@')) {
                         jid = jid.includes('-') ? `${jid}@g.us` : `${jid}@s.whatsapp.net`;
                     }
                     settings.viewOnceJid = jid;
-                    saveSettings(settings);
-                    await msg.reply(`✅ Anti-View Once Routing Set!\nRecovered media will now be secretly forwarded to:\n${jid}`);
+                    saveSettings(settings, sessionId);
+                    await msg.reply(`âœ… Anti-View Once Routing Set!\nRecovered media will now be secretly forwarded to:\n${jid}`);
                 } else {
                     const currentTarget = settings.viewOnceJid || "Original Chat";
-                    await msg.reply(`*Usage:*\n• ${prefix}antiview on/off\n• ${prefix}antiview <Number/JID>\n• ${prefix}antiview none (To disable stealth)\n\n*Status:* ${settings.antiViewOnce ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
+                    await msg.reply(`*Usage:*\nâ€¢ ${prefix}antiview on/off\nâ€¢ ${prefix}antiview <Number/JID>\nâ€¢ ${prefix}antiview none (To disable stealth)\n\n*Status:* ${settings.antiViewOnce ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
                 }
             }
 
@@ -392,44 +392,44 @@ async function handleMessages(sock, m) {
                 const action = args[0]?.toLowerCase();
                 if (action === 'public') {
                     settings.botMode = 'public';
-                    saveSettings(settings);
-                    await msg.reply("🔓 Bot is now in PUBLIC Mode.\nEveryone can use commands.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("ðŸ”“ Bot is now in PUBLIC Mode.\nEveryone can use commands.");
                 } else if (action === 'private') {
                     settings.botMode = 'private';
-                    saveSettings(settings);
-                    await msg.reply("🔒 Bot is now in PRIVATE Mode.\nOnly YOU can use commands.");
+                    saveSettings(settings, sessionId);
+                    await msg.reply("ðŸ”’ Bot is now in PRIVATE Mode.\nOnly YOU can use commands.");
                 } else {
                     await msg.reply(`*Usage:*\n1. ${prefix}mode public\n2. ${prefix}mode private\n\n*Current Mode:* ${settings.botMode.toUpperCase()}`);
                 }
             }
 
             if (command === 'channel') {
-                await msg.reply(`*📢 MR FK BOT OFFICIAL CHANNEL*\n\nPlease follow our channel to get updates and support us:\n👉 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332`);
+                await msg.reply(`*ðŸ“¢ MR FK BOT OFFICIAL CHANNEL*\n\nPlease follow our channel to get updates and support us:\nðŸ‘‰ https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332`);
             }
 
             if (command === 'menu') {
-                const menuText = `*👑 MR FK BOT MENU*\n` +
+                const menuText = `*ðŸ‘‘ MR FK BOT MENU*\n` +
                                  `*Owner:* ${config.ownerName}\n` +
                                  `*Prefix:* [ ${prefix} ]\n` +
                                  `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +
-                                 `*⚙️ SYSTEM SETTINGS*\n` +
-                                 `✅ Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
-                                 `✅ Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
-                                 `✅ Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
-                                 `*🛡️ ANTI-DELETE COMMANDS*\n` +
-                                 `1. *${prefix}antidelete <on/off>*\n  ↳ Turns the Anti-Delete engine on or off.\n` +
-                                 `2. *${prefix}antidelete <JID>*\n  ↳ Forwards deleted msgs to a specific group/chat.\n\n` +
-                                 `*📸 MEDIA & STATUS COMMANDS*\n` +
-                                 `3. *${prefix}antiview <on/off>*\n  ↳ Auto-recovers View Once media.\n` +
-                                 `4. *${prefix}antiview <JID>*\n  ↳ Forwards View Once media to a specific group/chat.\n` +
-                                 `5. *${prefix}autostatus <on/off>*\n  ↳ Automatically downloads all WhatsApp Statuses.\n` +
-                                 `6. *${prefix}autostatus <JID>*\n  ↳ Forwards saved statuses to a specific group/chat.\n\n` +
-                                 `*🔧 UTILITY COMMANDS*\n` +
-                                 `7. *${prefix}mode <public/private>*\n  ↳ Change bot security access.\n` +
-                                 `8. *${prefix}channel*\n  ↳ Get the official channel link.\n` +
-                                 `9. *${prefix}jid*\n  ↳ Prints the exact ID of the current chat/group.\n` +
-                                 `10. *${prefix}ping*\n  ↳ Checks if the bot is alive.\n` +
-                                 `11. *${prefix}menu*\n  ↳ Displays this panel.`;
+                                 `*âš™ï¸ SYSTEM SETTINGS*\n` +
+                                 `âœ… Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
+                                 `âœ… Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
+                                 `âœ… Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
+                                 `*ðŸ›¡ï¸ ANTI-DELETE COMMANDS*\n` +
+                                 `1. *${prefix}antidelete <on/off>*\n  â†³ Turns the Anti-Delete engine on or off.\n` +
+                                 `2. *${prefix}antidelete <JID>*\n  â†³ Forwards deleted msgs to a specific group/chat.\n\n` +
+                                 `*ðŸ“¸ MEDIA & STATUS COMMANDS*\n` +
+                                 `3. *${prefix}antiview <on/off>*\n  â†³ Auto-recovers View Once media.\n` +
+                                 `4. *${prefix}antiview <JID>*\n  â†³ Forwards View Once media to a specific group/chat.\n` +
+                                 `5. *${prefix}autostatus <on/off>*\n  â†³ Automatically downloads all WhatsApp Statuses.\n` +
+                                 `6. *${prefix}autostatus <JID>*\n  â†³ Forwards saved statuses to a specific group/chat.\n\n` +
+                                 `*ðŸ”§ UTILITY COMMANDS*\n` +
+                                 `7. *${prefix}mode <public/private>*\n  â†³ Change bot security access.\n` +
+                                 `8. *${prefix}channel*\n  â†³ Get the official channel link.\n` +
+                                 `9. *${prefix}jid*\n  â†³ Prints the exact ID of the current chat/group.\n` +
+                                 `10. *${prefix}ping*\n  â†³ Checks if the bot is alive.\n` +
+                                 `11. *${prefix}menu*\n  â†³ Displays this panel.`;
 
                 try {
                     const logoBuffer = fs.readFileSync(config.logoPath);
@@ -448,3 +448,4 @@ async function handleMessages(sock, m) {
 }
 
 module.exports = { handleMessages };
+
