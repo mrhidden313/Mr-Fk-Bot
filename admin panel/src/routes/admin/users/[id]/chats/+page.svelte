@@ -140,7 +140,7 @@
                             </div>
                             <div class="chat-info">
                                 <div class="chat-row-1">
-                                    <span class="chat-name">{chat.pushName || formatNumber(chat.jid)}</span>
+                                    <span class="chat-name">{chat.isGroup && chat.groupName ? chat.groupName : (chat.pushName || formatNumber(chat.jid))}</span>
                                     <span class="chat-time">{formatDate(chat.timestamp)}</span>
                                 </div>
                                 <div class="chat-row-2">
