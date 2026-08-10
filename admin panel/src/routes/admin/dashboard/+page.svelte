@@ -46,7 +46,7 @@
 
     async function createUser() {
         if (!newEmail.trim() || !newPassword.trim()) {
-            createError = 'Both email and password are required.';
+            createError = 'Both fields are required.';
             return;
         }
         creating = true;
@@ -61,15 +61,15 @@
             let data;
             try { data = await res.json(); } catch { data = {}; }
             if (res.ok) {
-                createMessage = `✓ User "${newEmail}" created!`;
+                createMessage = `✓ "${newEmail}" created!`;
                 newEmail = '';
                 newPassword = '';
                 await fetchUsers();
             } else {
                 createError = data.error || `Failed (${res.status})`;
             }
-        } catch (err) {
-            createError = 'Network error — cannot reach server.';
+        } catch {
+            createError = 'Network error.';
         } finally {
             creating = false;
         }
@@ -83,8 +83,9 @@
                 method: 'DELETE',
                 headers: { 'x-admin-token': token, 'Authorization': token }
             });
-            if (res.ok) { users = users.filter(u => u._id !== userId); }
-            else {
+            if (res.ok) {
+                users = users.filter(u => u._id !== userId);
+            } else {
                 let data; try { data = await res.json(); } catch { data = {}; }
                 alert(data.error || 'Delete failed.');
             }
@@ -104,89 +105,91 @@
 </script>
 
 <div class="dashboard">
-    <div class="top-bar">
-        <div class="top-bar-left">
-            <div class="avatar">⚡</div>
-            <div>
-                <h1>Admin Panel</h1>
-                <p>MR FK Engine — Client Management</p>
-            </div>
+    <!-- Header -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <h1>Admin Dashboard</h1>
+            <p>Manage SaaS Clients &amp; Access Control</p>
         </div>
-        <button class="btn btn-ghost" onclick={logout}>Logout</button>
+        <button class="btn-logout" onclick={logout}>Logout</button>
     </div>
 
     <div class="grid">
         <!-- Create User -->
         <div class="card">
-            <h2 class="card-title"><span>+</span> New Client</h2>
+            <h2 class="card-title">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Generate Client Account
+            </h2>
 
             {#if createMessage}
-                <div class="alert alert-success">{createMessage}</div>
+                <div class="msg msg-ok">{createMessage}</div>
             {/if}
             {#if createError}
-                <div class="alert alert-error">⚠ {createError}</div>
+                <div class="msg msg-err">⚠ {createError}</div>
             {/if}
 
-            <form onsubmit={(e) => { e.preventDefault(); createUser(); }} class="create-form">
+            <form onsubmit={(e) => { e.preventDefault(); createUser(); }}>
                 <div class="field">
                     <label for="newEmail">Client Email</label>
                     <input id="newEmail" type="email" bind:value={newEmail} required disabled={creating} placeholder="client@example.com" />
                 </div>
                 <div class="field">
-                    <label for="newPass">Temp Password</label>
+                    <label for="newPass">Temporary Password</label>
                     <input id="newPass" type="text" bind:value={newPassword} required disabled={creating} placeholder="Set a password" />
                 </div>
-                <button type="submit" class="btn btn-primary" disabled={creating}>
-                    {#if creating}<span class="spinner"></span> Creating...{:else}Create Account{/if}
+                <button type="submit" class="btn-create" disabled={creating}>
+                    {#if creating}<span class="spin"></span> Creating...{:else}Create Account{/if}
                 </button>
             </form>
 
             <div class="divider"></div>
 
-            <div class="stats-row">
-                <div class="stat-box">
-                    <span class="stat-val">{users.length}</span>
-                    <span class="stat-label">Total</span>
+            <div class="stats">
+                <div class="stat">
+                    <span class="stat-n">{users.length}</span>
+                    <span class="stat-l">Total Clients</span>
                 </div>
-                <div class="stat-box">
-                    <span class="stat-val">{users.filter(u => u.connectedNumber).length}</span>
-                    <span class="stat-label">Active</span>
+                <div class="stat">
+                    <span class="stat-n">{users.filter(u => u.connectedNumber).length}</span>
+                    <span class="stat-l">Connected</span>
                 </div>
             </div>
         </div>
 
-        <!-- Users List -->
-        <div class="card card-wide">
+        <!-- Users Table -->
+        <div class="card">
             <div class="card-header">
-                <h2 class="card-title"><span>👥</span> Active Clients</h2>
-                <button class="btn btn-ghost btn-sm" onclick={fetchUsers} disabled={pageLoading}>
+                <h2 class="card-title" style="margin:0">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
+                    Active Clients
+                </h2>
+                <button class="btn-refresh" onclick={fetchUsers} disabled={pageLoading}>
                     {pageLoading ? '...' : '↻ Refresh'}
                 </button>
             </div>
 
             {#if pageLoading}
-                <div class="state-center">
-                    <div class="spinner-lg"></div>
+                <div class="state">
+                    <div class="spin-lg"></div>
                     <p>Loading clients...</p>
                 </div>
             {:else if fetchError}
-                <div class="state-center">
-                    <div class="error-icon">⚠</div>
-                    <p class="error-text">{fetchError}</p>
-                    <button class="btn btn-ghost btn-sm" onclick={fetchUsers}>Retry</button>
+                <div class="state">
+                    <p class="err-txt">⚠ {fetchError}</p>
+                    <button class="btn-refresh" onclick={fetchUsers}>Retry</button>
                 </div>
             {:else if users.length === 0}
-                <div class="state-center">
-                    <div class="empty-icon">📋</div>
-                    <p>No clients yet. Create one!</p>
+                <div class="state">
+                    <p style="color:#64748b">No clients yet. Create your first one.</p>
                 </div>
             {:else}
-                <div class="table-wrapper">
-                    <table class="table">
+                <div class="table-wrap">
+                    <table>
                         <thead>
                             <tr>
-                                <th>Email</th>
-                                <th>WhatsApp</th>
+                                <th>Client Email</th>
+                                <th>WhatsApp Status</th>
                                 <th>Created</th>
                                 <th></th>
                             </tr>
@@ -194,17 +197,17 @@
                         <tbody>
                             {#each users as user}
                                 <tr>
-                                    <td class="email-cell">{user.email}</td>
+                                    <td class="em">{user.email}</td>
                                     <td>
                                         {#if user.connectedNumber}
-                                            <span class="badge badge-green">● Connected</span>
+                                            <span class="badge green">● Connected</span>
                                         {:else}
-                                            <span class="badge badge-gray">○ Inactive</span>
+                                            <span class="badge gray">○ Not Connected</span>
                                         {/if}
                                     </td>
-                                    <td class="date-cell">{formatDate(user.createdAt)}</td>
+                                    <td class="dt">{formatDate(user.createdAt)}</td>
                                     <td>
-                                        <button class="btn-delete" onclick={() => deleteUser(user._id, user.email)} disabled={deletingId === user._id}>
+                                        <button class="btn-del" onclick={() => deleteUser(user._id, user.email)} disabled={deletingId === user._id}>
                                             {deletingId === user._id ? '...' : '🗑'}
                                         </button>
                                     </td>
@@ -220,72 +223,67 @@
 
 <style>
     .dashboard { width: 100%; max-width: 1100px; }
-    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .top-bar-left { display: flex; align-items: center; gap: 0.875rem; }
-    .avatar { width: 44px; height: 44px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; box-shadow: 0 4px 15px rgba(99,102,241,0.3); flex-shrink: 0; }
-    .top-bar-left h1 { font-size: 1.375rem; font-weight: 700; color: #f1f5f9; margin: 0 0 2px; }
-    .top-bar-left p { font-size: 0.8125rem; color: #64748b; margin: 0; }
+
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .topbar-left h1 { font-size: 1.75rem; font-weight: 700; color: #fff; margin: 0 0 4px; }
+    .topbar-left p { font-size: 0.875rem; color: #64748b; margin: 0; }
+    .btn-logout { padding: 0.5rem 1.125rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(100,116,139,0.3); border-radius: 8px; color: #94a3b8; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
+    .btn-logout:hover { background: rgba(51,65,85,0.8); color: #e2e8f0; }
 
     .grid { display: grid; grid-template-columns: 280px 1fr; gap: 1.25rem; align-items: start; }
     @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
 
-    .card { background: linear-gradient(135deg, #1a1f2e 0%, #161b27 100%); border: 1px solid rgba(99,102,241,0.15); border-radius: 16px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-    .card-wide {}
+    .card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(100,116,139,0.2); border-radius: 16px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
     .card-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; margin: 0 0 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
-    .card-header .card-title { margin: 0; }
 
     .field { margin-bottom: 1rem; }
     .field label { display: block; font-size: 0.8125rem; font-weight: 500; color: #94a3b8; margin-bottom: 0.375rem; }
-    .field input { width: 100%; padding: 0.7rem 0.875rem; background: rgba(10,15,30,0.8); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; color: #e2e8f0; font-size: 0.875rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
-    .field input:focus { border-color: rgba(99,102,241,0.5); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+    .field input { width: 100%; padding: 0.7rem 0.875rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(100,116,139,0.3); border-radius: 8px; color: #e2e8f0; font-size: 0.875rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; }
+    .field input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.12); }
     .field input:disabled { opacity: 0.5; cursor: not-allowed; }
     .field input::placeholder { color: #475569; }
 
-    .btn { padding: 0.7rem 1.25rem; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; }
-    .btn-primary { width: 100%; justify-content: center; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; box-shadow: 0 4px 12px rgba(99,102,241,0.25); margin-top: 0.25rem; }
-    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(99,102,241,0.35); }
-    .btn-ghost { background: rgba(99,102,241,0.08); color: #94a3b8; border: 1px solid rgba(99,102,241,0.15); }
-    .btn-ghost:hover:not(:disabled) { background: rgba(99,102,241,0.15); color: #e2e8f0; }
-    .btn-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-create { width: 100%; padding: 0.75rem; margin-top: 0.25rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(16,185,129,0.25); }
+    .btn-create:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
+    .btn-create:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-    .btn-delete { padding: 0.35rem 0.625rem; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.15); border-radius: 6px; color: #f87171; cursor: pointer; font-size: 0.875rem; transition: all 0.2s; }
-    .btn-delete:hover:not(:disabled) { background: rgba(239,68,68,0.15); }
-    .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-refresh { padding: 0.375rem 0.75rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(100,116,139,0.3); border-radius: 7px; color: #94a3b8; font-size: 0.8125rem; cursor: pointer; transition: all 0.2s; }
+    .btn-refresh:hover:not(:disabled) { color: #e2e8f0; }
+    .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .alert { padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.8125rem; margin-bottom: 1rem; }
-    .alert-success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #34d399; }
-    .alert-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #f87171; }
+    .btn-del { padding: 0.3rem 0.6rem; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.15); border-radius: 6px; color: #f87171; cursor: pointer; font-size: 0.875rem; transition: all 0.2s; }
+    .btn-del:hover:not(:disabled) { background: rgba(239,68,68,0.18); }
+    .btn-del:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .divider { height: 1px; background: rgba(99,102,241,0.1); margin: 1.25rem 0; }
-    .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-    .stat-box { background: rgba(10,15,30,0.5); border: 1px solid rgba(99,102,241,0.1); border-radius: 10px; padding: 0.875rem; text-align: center; }
-    .stat-val { display: block; font-size: 1.625rem; font-weight: 700; color: #a5b4fc; }
-    .stat-label { display: block; font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+    .msg { padding: 0.625rem 0.875rem; border-radius: 8px; font-size: 0.8125rem; margin-bottom: 0.875rem; }
+    .msg-ok { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #34d399; }
+    .msg-err { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #f87171; }
 
-    .state-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; gap: 0.75rem; color: #64748b; text-align: center; }
-    .state-center p { margin: 0; font-size: 0.875rem; }
-    .error-icon { font-size: 2rem; }
-    .error-text { color: #f87171 !important; }
-    .empty-icon { font-size: 2rem; }
+    .divider { height: 1px; background: rgba(100,116,139,0.15); margin: 1.25rem 0; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .stat { background: rgba(15,23,42,0.5); border: 1px solid rgba(100,116,139,0.15); border-radius: 10px; padding: 0.875rem; text-align: center; }
+    .stat-n { display: block; font-size: 1.75rem; font-weight: 700; color: #10b981; }
+    .stat-l { display: block; font-size: 0.75rem; color: #64748b; margin-top: 2px; }
 
-    .table-wrapper { overflow-x: auto; }
-    .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-    .table thead tr { border-bottom: 1px solid rgba(99,102,241,0.15); }
-    .table th { padding: 0.625rem 0.875rem; text-align: left; font-weight: 500; color: #64748b; font-size: 0.8125rem; }
-    .table tbody tr { border-bottom: 1px solid rgba(99,102,241,0.06); transition: background 0.15s; }
-    .table tbody tr:hover { background: rgba(99,102,241,0.05); }
-    .table tbody tr:last-child { border-bottom: none; }
-    .table td { padding: 0.875rem; color: #cbd5e1; vertical-align: middle; }
-    .email-cell { color: #e2e8f0; font-weight: 500; word-break: break-all; }
-    .date-cell { color: #64748b; white-space: nowrap; }
+    .state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 1rem; gap: 0.75rem; text-align: center; min-height: 180px; }
+    .err-txt { color: #f87171; font-size: 0.875rem; margin: 0; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    thead tr { border-bottom: 1px solid rgba(100,116,139,0.2); }
+    th { padding: 0.625rem 0.875rem; text-align: left; font-weight: 500; color: #64748b; font-size: 0.8125rem; }
+    tbody tr { border-bottom: 1px solid rgba(100,116,139,0.08); transition: background 0.15s; }
+    tbody tr:hover { background: rgba(16,185,129,0.04); }
+    tbody tr:last-child { border-bottom: none; }
+    td { padding: 0.875rem; color: #cbd5e1; vertical-align: middle; }
+    .em { color: #e2e8f0; font-weight: 500; word-break: break-all; }
+    .dt { color: #64748b; white-space: nowrap; }
 
     .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.625rem; border-radius: 20px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
-    .badge-green { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
-    .badge-gray { background: rgba(100,116,139,0.1); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
+    .green { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+    .gray { background: rgba(100,116,139,0.1); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
 
-    .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
-    .spinner-lg { width: 40px; height: 40px; border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; display: inline-block; }
+    .spin-lg { width: 36px; height: 36px; border: 3px solid rgba(16,185,129,0.2); border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 </style>
