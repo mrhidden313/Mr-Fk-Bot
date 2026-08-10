@@ -18,7 +18,7 @@ const sessionMessageStores = new Map();
  * @param {Function} onQRUpdate - Callback when a new QR is generated
  * @param {Function} onStatusUpdate - Callback when connection status changes
  */
-async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
+async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, phoneNumber) {
     if (activeSessions.has(sessionId)) {
         console.log(`[Session ${sessionId}] Already running.`);
         return activeSessions.get(sessionId);
@@ -37,12 +37,25 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         auth: state,
+        browser: ['Ubuntu', 'Chrome', '20.0.04'], // Essential for pairing code
         getMessage: async (key) => {
             // Only look up from THIS session's store (isolation!)
             const store = sessionMessageStores.get(sessionId) || {};
             return store[key.id] || { conversation: 'hello' };
         }
     });
+
+    if (phoneNumber && !sock.authState.creds.registered) {
+        setTimeout(async () => {
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log(`[Session ${sessionId}] Pairing Code: ${code}`);
+                if (onPairingCode) onPairingCode(code);
+            } catch (err) {
+                console.error(`[Session ${sessionId}] Failed to request pairing code:`, err);
+            }
+        }, 3000);
+    }
 
     // Store messages per-session (ISOLATED)
     sock.ev.on('messages.upsert', async (m) => {
@@ -73,7 +86,7 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
             if (onStatusUpdate) onStatusUpdate('disconnected');
 
             if (shouldReconnect) {
-                setTimeout(() => startBot(sessionId, onQRUpdate, onStatusUpdate), 5000);
+                setTimeout(() => startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, phoneNumber), 5000);
             } else {
                 console.log(`[Session ${sessionId}] Logged out. Clearing auth state.`);
                 AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to clear auth:', e));

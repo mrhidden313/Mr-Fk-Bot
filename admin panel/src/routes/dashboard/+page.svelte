@@ -9,6 +9,9 @@
     let errorMsg = $state('');
     let actionLoading = $state(false);
     let pollInterval = null;
+    let authMode = $state('qr'); // 'qr' or 'pair'
+    let phoneNumber = $state('');
+    let pairingCodeStr = $state(null);
 
     const API_URL = '/api';
 
@@ -34,9 +37,14 @@
             const newStatus = data.status || 'disconnected';
             status = newStatus;
             if (data.qr) qrBase64 = data.qr;
+            if (data.pairingCode) pairingCodeStr = data.pairingCode;
+            
             if (newStatus === 'connected' || newStatus === 'disconnected' || newStatus === 'not_found') {
                 stopPolling();
-                if (newStatus !== 'qr_ready' && newStatus !== 'starting') qrBase64 = null;
+                if (newStatus !== 'qr_ready' && newStatus !== 'starting' && newStatus !== 'pairing_code') {
+                    qrBase64 = null;
+                    pairingCodeStr = null;
+                }
             } else {
                 startPolling();
             }
@@ -60,10 +68,13 @@
         status = 'starting';
         startPolling();
         try {
+            const payload = { sessionId: token };
+            if (authMode === 'pair') payload.phoneNumber = phoneNumber;
+            
             const res = await fetch(`${API_URL}/sessions/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: token })
+                body: JSON.stringify(payload)
             });
             let data;
             try { data = await res.json(); } catch { data = {}; }
@@ -138,11 +149,21 @@
                 <div class="icon-circle icon-gray">📵</div>
                 <h2>Not Connected</h2>
                 <p>Link your WhatsApp to activate Anti-Delete & View-Once protection.</p>
+                
+                <div class="auth-mode-switch">
+                    <button class="mode-btn {authMode === 'qr' ? 'active' : ''}" onclick={() => authMode = 'qr'}>QR Code</button>
+                    <button class="mode-btn {authMode === 'pair' ? 'active' : ''}" onclick={() => authMode = 'pair'}>Pairing Code</button>
+                </div>
+                
+                {#if authMode === 'pair'}
+                    <input type="text" class="phone-input" placeholder="Phone Number (e.g. 923...)" bind:value={phoneNumber} />
+                {/if}
+
                 {#if errorMsg}
                     <div class="alert alert-error">⚠ {errorMsg}</div>
                 {/if}
-                <button class="btn btn-primary" onclick={requestConnection} disabled={actionLoading}>
-                    {#if actionLoading}<span class="spinner"></span> Starting...{:else}Generate QR Code{/if}
+                <button class="btn btn-primary" onclick={requestConnection} disabled={actionLoading || (authMode === 'pair' && !phoneNumber)}>
+                    {#if actionLoading}<span class="spinner"></span> Starting...{:else}Connect Now{/if}
                 </button>
             </div>
 
@@ -164,14 +185,22 @@
                     <img src={qrBase64} alt="WhatsApp QR Code" />
                 </div>
                 <h2>Scan to Connect</h2>
-                <p>Open WhatsApp → Menu → <strong>Linked Devices</strong> → Link a Device</p>
+                <p>Open WhatsApp > Menu > <strong>Linked Devices</strong> > Link a Device</p>
                 <div class="qr-timer"><span class="dot-blink"></span> Waiting for scan...</div>
             </div>
 
-        {:else if (status === 'qr_ready' && !qrBase64) || status === 'starting'}
+        {:else if status === 'pairing_code' && pairingCodeStr}
+            <div class="state-view">
+                <h2>Pairing Code</h2>
+                <div class="pairing-code-display">{pairingCodeStr}</div>
+                <p>Open WhatsApp > Linked Devices > Link with Phone Number</p>
+                <div class="qr-timer"><span class="dot-blink"></span> Waiting for confirmation...</div>
+            </div>
+
+        {:else if (status === 'qr_ready' && !qrBase64) || status === 'starting' || (status === 'pairing_code' && !pairingCodeStr)}
             <div class="state-view">
                 <div class="spinner-lg"></div>
-                <p>QR generating, please wait...</p>
+                <p>Generating, please wait...</p>
             </div>
 
         {:else if status === 'connected'}
@@ -256,4 +285,11 @@
     .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
     .spinner-lg { width: 44px; height: 44px; border: 3px solid rgba(20,184,166,0.2); border-top-color: #14b8a6; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .auth-mode-switch { display: flex; gap: 0.5rem; justify-content: center; margin: 1.5rem 0 1rem; }
+    .mode-btn { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
+    .mode-btn.active { background: rgba(20,184,166,0.1); color: #14b8a6; border-color: #14b8a6; font-weight: 600; }
+    .phone-input { padding: 0.75rem; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #f8fafc; width: 100%; max-width: 250px; margin-bottom: 1.5rem; text-align: center; font-size: 1.1rem; outline: none; transition: 0.2s; }
+    .phone-input:focus { border-color: #14b8a6; box-shadow: 0 0 0 2px rgba(20,184,166,0.2); }
+    .pairing-code-display { font-size: 2.5rem; font-weight: 700; letter-spacing: 6px; padding: 1.5rem; background: #0f172a; border-radius: 12px; border: 2px dashed #14b8a6; color: #fff; margin: 1.5rem 0; text-align: center; font-family: monospace; }
 </style>

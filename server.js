@@ -266,11 +266,12 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
 // ─── SESSION ENGINE ───────────────────────────────────────────────────────────
 
 const pendingQRs = new Map();
+const pendingPairingCodes = new Map();
 const sessionStatuses = new Map();
 
 // POST /api/sessions/start
 app.post('/api/sessions/start', async (req, res) => {
-    const { sessionId } = req.body;
+    const { sessionId, phoneNumber } = req.body;
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required.' });
 
     // Validate that user exists
@@ -301,8 +302,16 @@ app.post('/api/sessions/start', async (req, res) => {
         },
         (status) => {
             sessionStatuses.set(sessionId, status);
-            if (status === 'connected') pendingQRs.delete(sessionId);
-        }
+            if (status === 'connected') {
+                pendingQRs.delete(sessionId);
+                pendingPairingCodes.delete(sessionId);
+            }
+        },
+        (code) => {
+            pendingPairingCodes.set(sessionId, code);
+            sessionStatuses.set(sessionId, 'pairing_code');
+        },
+        phoneNumber
     ).catch(err => {
         console.error(`[Session ${sessionId}] Failed to start:`, err);
         sessionStatuses.set(sessionId, 'error');
@@ -314,9 +323,11 @@ app.post('/api/sessions/start', async (req, res) => {
 // GET /api/sessions/:id/status
 app.get('/api/sessions/:id/status', (req, res) => {
     const sessionId = req.params.id;
-    const status = sessionStatuses.get(sessionId) || 'not_found';
+    let status = sessionStatuses.get(sessionId) || 'not_found';
+    if (activeSessions.has(sessionId)) status = 'connected'; // Always override if strictly connected
     const qr = pendingQRs.get(sessionId) || null;
-    res.json({ sessionId, status, qr });
+    const pairingCode = pendingPairingCodes.get(sessionId) || null;
+    res.json({ sessionId, status, qr, pairingCode });
 });
 
 // POST /api/sessions/stop
