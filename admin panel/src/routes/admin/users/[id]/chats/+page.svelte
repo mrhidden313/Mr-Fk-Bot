@@ -132,13 +132,13 @@
                     {#each chats as chat}
                         <!-- svelte-ignore a11y_click_events_have_key_events -->
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <div class="chat-item {selectedJid === chat._id ? 'active' : ''}" onclick={() => selectChat(chat._id)}>
+                        <div class="chat-item {selectedJid === chat.jid ? 'active' : ''}" onclick={() => selectChat(chat.jid)}>
                             <div class="chat-avatar">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                             </div>
                             <div class="chat-info">
                                 <div class="chat-row-1">
-                                    <span class="chat-name">{chat.pushName || formatNumber(chat._id)}</span>
+                                    <span class="chat-name">{chat.pushName || formatNumber(chat.jid)}</span>
                                     <span class="chat-time">{formatDate(chat.timestamp)}</span>
                                 </div>
                                 <div class="chat-row-2">
