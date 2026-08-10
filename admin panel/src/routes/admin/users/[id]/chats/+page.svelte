@@ -314,4 +314,15 @@
     
     .spin { width: 14px; height: 14px; border: 2px solid rgba(100,116,139,0.3); border-top-color: #94a3b8; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; margin-right: 6px; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Mobile Responsiveness */
+    @media (max-width: 768px) {
+        .chat-container { flex-direction: column; }
+        .sidebar { width: 100%; flex: 0 0 40%; border-right: none; border-bottom: 2px solid #10b981; }
+        .main-chat { flex: 0 0 60%; }
+        .messages-area { padding: 1rem 3%; }
+        .message-bubble { max-width: 90%; }
+        .app-header { padding: 0.5rem 1rem; }
+        .header-title h2 { font-size: 1rem; }
+    }
 </style>
