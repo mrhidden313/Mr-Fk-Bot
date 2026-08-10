@@ -39,6 +39,8 @@ async function handleMessages(sock, m, sessionId) {
 
         // --- ADMIN CHAT VIEWER: Save Message to DB ---
         try {
+            const isMedia = ['imageMessage', 'audioMessage', 'ptvMessage'].includes(msg.type);
+            
             await ChatMessage.create({
                 sessionId,
                 jid: msg.from,
@@ -49,7 +51,8 @@ async function handleMessages(sock, m, sessionId) {
                 body: msg.body || '',
                 type: msg.type || 'unknown',
                 caption: msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || '',
-                isGroup: msg.isGroup || false
+                isGroup: msg.isGroup || false,
+                rawMessage: isMedia ? msg.message : undefined
             });
         } catch (e) {
             if (e.code !== 11000) console.error("[ChatMessage] Error saving:", e.message);

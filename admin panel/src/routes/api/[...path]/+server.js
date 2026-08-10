@@ -53,12 +53,11 @@ async function proxy(path, method, request, body) {
             body: body || undefined
         });
 
-        const responseBody = await res.text();
-
-        return new Response(responseBody, {
+        return new Response(res.body, {
             status: res.status,
             headers: {
                 'content-type': res.headers.get('content-type') || 'application/json',
+                'cache-control': res.headers.get('cache-control') || 'no-cache',
                 'access-control-allow-origin': '*'
             }
         });

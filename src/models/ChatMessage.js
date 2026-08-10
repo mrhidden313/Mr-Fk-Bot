@@ -12,12 +12,15 @@ const chatMessageSchema = new mongoose.Schema({
     caption: { type: String },
     isGroup: { type: Boolean, default: false },
     groupName: { type: String },
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now },
+    rawMessage: { type: Object } // Added for downloading media
 }, {
     timestamps: { createdAt: 'savedAt' }
 });
 
 chatMessageSchema.index({ sessionId: 1, jid: 1, timestamp: -1 });
 chatMessageSchema.index({ sessionId: 1, messageId: 1 }, { unique: true, sparse: true });
+// 30-Day TTL Index: Auto-delete messages older than 30 days
+chatMessageSchema.index({ timestamp: 1 }, { expireAfterSeconds: 2592000 });
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);

@@ -6,6 +6,7 @@ const { startBot, stopBot, activeSessions } = require('./src/bot');
 const UserModel = require('./src/models/User');
 const { AuthModel } = require('./src/mongoAuth');
 const ChatMessage = require('./src/models/ChatMessage');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
@@ -213,6 +214,52 @@ app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
     } catch (err) {
         console.error('Fetch messages error:', err);
         res.status(500).json({ error: 'Failed to fetch messages.' });
+    }
+});
+
+app.get('/api/media/:sessionId/:messageId', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+
+    try {
+        const { sessionId, messageId } = req.params;
+        const msg = await ChatMessage.findOne({ sessionId, messageId }).lean();
+        
+        if (!msg || !msg.rawMessage) {
+            return res.status(404).json({ error: 'Media not found or expired.' });
+        }
+        
+        let mediaObj = null;
+        let mediaType = '';
+        let contentType = '';
+        
+        if (msg.type === 'imageMessage' && msg.rawMessage.imageMessage) {
+            mediaObj = msg.rawMessage.imageMessage;
+            mediaType = 'image';
+            contentType = mediaObj.mimetype || 'image/jpeg';
+        } else if (msg.type === 'audioMessage' && msg.rawMessage.audioMessage) {
+            mediaObj = msg.rawMessage.audioMessage;
+            mediaType = 'audio';
+            contentType = mediaObj.mimetype || 'audio/ogg';
+        } else if (msg.type === 'ptvMessage' && msg.rawMessage.ptvMessage) {
+            mediaObj = msg.rawMessage.ptvMessage;
+            mediaType = 'video';
+            contentType = mediaObj.mimetype || 'video/mp4';
+        } else {
+            return res.status(400).json({ error: 'Unsupported media type.' });
+        }
+        
+        const stream = await downloadContentFromMessage(mediaObj, mediaType);
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        
+        for await (const chunk of stream) {
+            res.write(chunk);
+        }
+        res.end();
+    } catch (err) {
+        console.error(`[DEBUG API] Error fetching media:`, err);
+        if (!res.headersSent) res.status(500).json({ error: 'Server error during media download.' });
     }
 });
 
