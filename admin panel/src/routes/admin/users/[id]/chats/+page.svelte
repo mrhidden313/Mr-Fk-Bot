@@ -95,6 +95,7 @@
     function formatNumber(jid) {
         if (!jid) return 'Unknown';
         if (jid.includes('@g.us')) return jid.split('@')[0] + ' (Group)';
+        if (jid.includes('@lid')) return 'Hidden User (WhatsApp Privacy)';
         return '+' + jid.split('@')[0];
     }
 </script>
