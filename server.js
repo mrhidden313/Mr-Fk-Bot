@@ -63,7 +63,15 @@ app.get('/api/admin/users', async (req, res) => {
 
     try {
         const users = await UserModel.find({}, { password: 0 }).sort({ createdAt: -1 });
-        res.json(users);
+        const usersList = users.map(u => {
+            const userId = u._id.toString();
+            const sock = activeSessions.get(userId);
+            return {
+                ...u.toObject(),
+                connectedNumber: sock && sock.user ? sock.user.id.split(':')[0].split('@')[0] : null
+            };
+        });
+        res.json(usersList);
     } catch (err) {
         console.error('Fetch users error:', err);
         res.status(500).json({ error: 'Failed to fetch users.' });
