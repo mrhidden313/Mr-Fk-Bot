@@ -83,11 +83,12 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
             console.log(`[Session ${sessionId}] Closed. Reconnecting: ${shouldReconnect}`);
 
             activeSessions.delete(sessionId);
-            if (onStatusUpdate) onStatusUpdate('disconnected');
-
+            
             if (shouldReconnect) {
+                if (onStatusUpdate) onStatusUpdate('syncing');
                 setTimeout(() => startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, phoneNumber), 5000);
             } else {
+                if (onStatusUpdate) onStatusUpdate('disconnected');
                 console.log(`[Session ${sessionId}] Logged out. Clearing auth state.`);
                 AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to clear auth:', e));
             }

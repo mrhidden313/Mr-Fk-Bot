@@ -246,6 +246,13 @@
                 <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 
+        {:else if status === 'syncing'}
+            <div class="state-view">
+                <div class="spinner-lg"></div>
+                <h2>Syncing Engine</h2>
+                <p>Establishing secure connection and syncing history...</p>
+            </div>
+
         {:else if status === 'connected'}
             <div class="state-view">
                 <div class="icon-circle icon-green">✓</div>
