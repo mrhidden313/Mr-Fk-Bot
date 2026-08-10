@@ -9,18 +9,18 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
 const ADMIN_EMAIL = 'mrhiddenhacker313@gmail.com';
 const ADMIN_PASSWORD = 'admin123';
-const ADMIN_TOKEN = 'admin_token_secure_mrfk_2024';
+const ADMIN_TOKEN = 'admin_token_secure';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper: check admin token from header OR body
+// Helper: check admin token from header OR body (accepts both old and new token)
 function isAdmin(req) {
     const fromHeader = req.headers['x-admin-token'] || req.headers['authorization'];
     const fromBody = req.body && req.body.token;
     const token = fromHeader || fromBody;
-    return token === ADMIN_TOKEN;
+    return token === ADMIN_TOKEN || token === 'admin_token_secure_mrfk_2024';
 }
 
 // ─── AUTH ───────────────────────────────────────────────────────────────────
