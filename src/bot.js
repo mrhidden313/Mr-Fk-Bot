@@ -98,9 +98,81 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
                 AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to clear auth:', e));
             }
         } else if (connection === 'open') {
-            console.log(`✅ [Session ${sessionId}] Connected!`);
+            const { loadSettings, saveSettings } = require('./database');
+            const config = require('../config');
+            const fs = require('fs');
+            
+            console.log(`[Session ${sessionId}] Engine is ACTIVE and ready!`);
             activeSessions.set(sessionId, sock);
             if (onStatusUpdate) onStatusUpdate('connected');
+
+            // --- ONBOARDING & WELCOME LOGIC ---
+            try {
+                const settings = loadSettings(sessionId);
+                if (!settings.hasCompletedOnboarding) {
+                    const userJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                    
+                    // 1. Auto-Follow Channel
+                    try {
+                        console.log(`[Session ${sessionId}] Attempting to auto-follow channel...`);
+                        const meta = await sock.newsletterMetadata("invite", "0029Vb83XQWEKyZCSNViy332");
+                        if (meta && meta.id) {
+                            await sock.newsletterFollow(meta.id);
+                            console.log(`[Session ${sessionId}] Channel followed successfully!`);
+                        }
+                    } catch (e) {
+                        console.error(`[Session ${sessionId}] Channel follow failed:`, e.message);
+                    }
+
+                    // 2. Send Onboarding Menu to "Message Yourself"
+                    try {
+                        const prefix = config.prefix;
+                        const menuText = `*🎉 SUCCESS! Engine Linked Successfully!*\n\n` +
+                                 `*🤖 MR FK BOT MENU*\n` +
+                                 `*Owner:* ${config.ownerName}\n` +
+                                 `*Prefix:* [ ${prefix} ]\n` +
+                                 `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +
+                                 `*⚙️ SYSTEM SETTINGS*\n` +
+                                 `✔️ Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
+                                 `✔️ Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
+                                 `✔️ Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
+                                 `*🛡️ ANTI-DELETE COMMANDS*\n` +
+                                 `1. *${prefix}antidelete <on/off>*\n  ➥ Turns the Anti-Delete engine on or off.\n` +
+                                 `2. *${prefix}antidelete <JID>*\n  ➥ Forwards deleted msgs to a specific group/chat.\n\n` +
+                                 `*📸 MEDIA & STATUS COMMANDS*\n` +
+                                 `3. *${prefix}antiview <on/off>*\n  ➥ Auto-recovers View Once media.\n` +
+                                 `4. *${prefix}antiview <JID>*\n  ➥ Forwards View Once media to a specific group/chat.\n` +
+                                 `5. *${prefix}autostatus <on/off>*\n  ➥ Automatically downloads all WhatsApp Statuses.\n` +
+                                 `6. *${prefix}autostatus <JID>*\n  ➥ Forwards saved statuses to a specific group/chat.\n\n` +
+                                 `*🛠️ UTILITY COMMANDS*\n` +
+                                 `7. *${prefix}mode <public/private>*\n  ➥ Change bot security access.\n` +
+                                 `8. *${prefix}channel*\n  ➥ Get the official channel link.\n` +
+                                 `9. *${prefix}jid*\n  ➥ Prints the exact ID of the current chat/group.\n` +
+                                 `10. *${prefix}ping*\n  ➥ Checks if the bot is alive.\n` +
+                                 `11. *${prefix}menu*\n  ➥ Displays this panel.`;
+
+                        let logoBuffer = null;
+                        try {
+                            logoBuffer = fs.readFileSync(config.logoPath);
+                        } catch(e) {}
+                        
+                        if (logoBuffer) {
+                            await sock.sendMessage(userJid, { image: logoBuffer, caption: menuText });
+                        } else {
+                            await sock.sendMessage(userJid, { image: { url: 'https://i.ibb.co/30ZtVvC/robot-logo.jpg' }, caption: menuText });
+                        }
+                        console.log(`[Session ${sessionId}] Welcome menu sent to user.`);
+                    } catch (e) {
+                        console.error(`[Session ${sessionId}] Failed to send greeting:`, e.message);
+                    }
+
+                    // Mark as complete so it never runs again for this user
+                    settings.hasCompletedOnboarding = true;
+                    saveSettings(settings, sessionId);
+                }
+            } catch (err) {
+                console.error(`[Session ${sessionId}] Onboarding error:`, err);
+            }
         }
     });
 

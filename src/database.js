@@ -9,7 +9,8 @@ const defaultSettings = {
     antiViewOnce: true,
     viewOnceJid: null,
     botMode: 'private',
-    knownUsers: []
+    knownUsers: [],
+    hasCompletedOnboarding: false
 };
 
 /**
