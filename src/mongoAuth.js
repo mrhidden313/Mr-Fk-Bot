@@ -21,7 +21,7 @@ async function useMongoDBAuthState(sessionId) {
         await AuthModel.findOneAndUpdate(
             { sessionId, type, keyId },
             { data: serialized },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
     };
 
