@@ -257,6 +257,7 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
         const restoreBuffer = (obj) => {
             if (!obj) return undefined;
             if (Buffer.isBuffer(obj)) return obj;
+            if (obj.buffer && Buffer.isBuffer(obj.buffer)) return obj.buffer; // Mongoose mongodb.Binary
             if (obj.buffer && obj.buffer.type === 'Buffer') return Buffer.from(obj.buffer.data);
             if (obj.type === 'Buffer' && Array.isArray(obj.data)) return Buffer.from(obj.data);
             if (obj instanceof Uint8Array) return Buffer.from(obj);
