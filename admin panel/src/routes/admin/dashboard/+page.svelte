@@ -239,9 +239,13 @@
                                     <td class="em">{user.email}</td>
                                     <td>
                                         {#if user.connectedNumber}
-                                            <span class="badge green">● Connected</span>
+                                            {#if user.isOnline}
+                                                <span class="badge green">● Connected (Active)</span>
+                                            {:else}
+                                                <span class="badge" style="background: rgba(255, 193, 7, 0.2); color: #ffc107;">● Connected (Offline)</span>
+                                            {/if}
                                         {:else}
-                                            <span class="badge gray">○ Offline</span>
+                                            <span class="badge gray">○ Not Linked</span>
                                         {/if}
                                     </td>
                                     <td class="dim">

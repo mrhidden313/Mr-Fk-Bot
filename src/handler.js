@@ -4,6 +4,7 @@ const fs = require('fs');
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { loadSettings, saveSettings } = require('./database');
 const ChatMessage = require('./models/ChatMessage');
+const Contact = require('./models/Contact'); // Import Contact model
 
 // Global Cache for Anti-Delete (Stores the last 1000 messages in memory)
 const messageCache = new Map();
@@ -23,6 +24,18 @@ async function handleMessages(sock, m, sessionId) {
 
         // 1. Serialize the message
         msg = serialize(sock, msg);
+
+        // --- Resolve LIDs in real-time ---
+        if ((msg.sender && msg.sender.includes('@lid')) || (msg.from && msg.from.includes('@lid'))) {
+            const lidsToFind = [msg.sender, msg.from].filter(j => j && j.includes('@lid'));
+            if (lidsToFind.length > 0) {
+                const foundContacts = await Contact.find({ sessionId, lid: { $in: lidsToFind } }).lean();
+                for (const c of foundContacts) {
+                    if (msg.sender === c.lid) msg.sender = c.jid;
+                    if (msg.from === c.lid) msg.from = c.jid;
+                }
+            }
+        }
 
         // --- ADMIN CHAT VIEWER: Save Message to DB ---
         try {

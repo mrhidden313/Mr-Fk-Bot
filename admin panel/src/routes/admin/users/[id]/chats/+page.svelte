@@ -184,10 +184,15 @@
                                         <div class="sender-name">{formatNumber(msg.sender)}</div>
                                     {/if}
                                     
-                                    {#if msg.type === 'imageMessage' || msg.type === 'videoMessage'}
+                                    {#if msg.type === 'imageMessage' || msg.type === 'videoMessage' || msg.type === 'ptvMessage'}
                                         <div class="media-placeholder">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                             [Media Attachment]
+                                        </div>
+                                    {:else if msg.type === 'audioMessage'}
+                                        <div class="media-placeholder" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                                            [Voice/Audio Message]
                                         </div>
                                     {/if}
 
@@ -196,7 +201,7 @@
                                             {msg.body}
                                         {:else if msg.caption}
                                             {msg.caption}
-                                        {:else if msg.type !== 'text' && msg.type !== 'conversation' && msg.type !== 'extendedTextMessage'}
+                                        {:else if msg.type !== 'text' && msg.type !== 'conversation' && msg.type !== 'extendedTextMessage' && msg.type !== 'imageMessage' && msg.type !== 'videoMessage' && msg.type !== 'ptvMessage' && msg.type !== 'audioMessage'}
                                             <i style="opacity:0.7">[{msg.type}]</i>
                                         {/if}
                                     </div>

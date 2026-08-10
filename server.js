@@ -63,14 +63,28 @@ app.get('/api/admin/users', async (req, res) => {
 
     try {
         const users = await UserModel.find({}, { password: 0 }).sort({ createdAt: -1 });
-        const usersList = users.map(u => {
+        const usersList = await Promise.all(users.map(async u => {
             const userId = u._id.toString();
             const sock = activeSessions.get(userId);
+            
+            // Fetch persistent auth state to show number even if currently offline
+            const authDoc = await AuthModel.findOne({ sessionId: userId, type: 'creds', keyId: 'creds' }).lean();
+            let authNumber = null;
+            if (authDoc && authDoc.data) {
+                try {
+                    const creds = JSON.parse(authDoc.data);
+                    if (creds.me && creds.me.id) {
+                        authNumber = creds.me.id.split(':')[0].split('@')[0];
+                    }
+                } catch(e) {}
+            }
+
             return {
                 ...u.toObject(),
-                connectedNumber: sock && sock.user ? sock.user.id.split(':')[0].split('@')[0] : null
+                connectedNumber: sock && sock.user ? sock.user.id.split(':')[0].split('@')[0] : authNumber,
+                isOnline: !!(sock && sock.user) // Add flag to let frontend know if it's currently running
             };
-        });
+        }));
         res.json(usersList);
     } catch (err) {
         console.error('Fetch users error:', err);

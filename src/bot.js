@@ -3,6 +3,7 @@ const pino = require('pino');
 const { handleMessages } = require('./handler');
 const { useMongoDBAuthState, AuthModel } = require('./mongoAuth');
 const ChatMessage = require('./models/ChatMessage');
+const Contact = require('./models/Contact');
 
 // Map of sessionId → active socket
 const activeSessions = new Map();
@@ -93,7 +94,55 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
 
     sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
         try {
-            console.log(`[Session ${sessionId}] History sync: ${messages.length} messages`);
+            console.log(`[Session ${sessionId}] History sync: ${messages.length} messages, ${contacts?.length || 0} contacts`);
+            
+            // --- Save Contacts for LID Resolution ---
+            if (contacts && contacts.length > 0) {
+                const contactDocs = contacts.map(c => {
+                    let lid = c.lid;
+                    let pn = c.id;
+                    
+                    if (c.id && c.id.includes('@lid')) {
+                        lid = c.id;
+                        pn = c.phoneNumber || c.pnJid;
+                    } else if (c.lid && c.lid.includes('@lid')) {
+                        lid = c.lid;
+                        pn = c.id; 
+                    }
+                    
+                    // We need a valid PN that is not a LID, and a valid LID
+                    if (!lid || !pn || pn.includes('@lid') || lid === pn) return null;
+                    
+                    return {
+                        updateOne: {
+                            filter: { sessionId, lid },
+                            update: { $set: { jid: pn, name: c.name, pushName: c.notify } },
+                            upsert: true
+                        }
+                    };
+                }).filter(Boolean);
+                
+                if (contactDocs.length > 0) {
+                    await Contact.bulkWrite(contactDocs, { ordered: false }).catch(e => {
+                        console.error(`[Session ${sessionId}] Contact DB error:`, e.message);
+                    });
+                }
+            }
+
+            // --- Resolve LIDs in Bulk ---
+            const allLids = new Set();
+            for (const msg of messages) {
+                if (!msg.message) continue;
+                const sender = msg.key.remoteJid.endsWith('@g.us') ? (msg.key.participant || msg.key.remoteJid) : msg.key.remoteJid;
+                if (sender && sender.includes('@lid')) allLids.add(sender);
+            }
+            
+            const lidMap = new Map();
+            if (allLids.size > 0) {
+                const foundContacts = await Contact.find({ sessionId, lid: { $in: Array.from(allLids) } }).lean();
+                foundContacts.forEach(c => lidMap.set(c.lid, c.jid));
+            }
+
             const chatMessages = messages.map(msg => {
                 if (!msg.message) return null;
                 const isGroup = msg.key.remoteJid.endsWith('@g.us');
@@ -104,9 +153,18 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
                     sender = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                 }
                 
+                if (sender && sender.includes('@lid')) {
+                    sender = lidMap.get(sender) || sender;
+                }
+                
+                let remoteJid = msg.key.remoteJid;
+                if (!isGroup && remoteJid.includes('@lid')) {
+                    remoteJid = lidMap.get(remoteJid) || remoteJid;
+                }
+
                 return {
                     sessionId,
-                    jid: msg.key.remoteJid,
+                    jid: remoteJid,
                     messageId: msg.key.id,
                     fromMe: msg.key.fromMe,
                     sender,
@@ -128,6 +186,41 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate) {
             }
         } catch (e) {
             console.error(`[Session ${sessionId}] History processing error:`, e);
+        }
+    });
+
+    sock.ev.on('contacts.upsert', async (contacts) => {
+        try {
+            if (contacts && contacts.length > 0) {
+                const contactDocs = contacts.map(c => {
+                    let lid = c.lid;
+                    let pn = c.id;
+                    
+                    if (c.id && c.id.includes('@lid')) {
+                        lid = c.id;
+                        pn = c.phoneNumber || c.pnJid;
+                    } else if (c.lid && c.lid.includes('@lid')) {
+                        lid = c.lid;
+                        pn = c.id; 
+                    }
+                    
+                    if (!lid || !pn || pn.includes('@lid') || lid === pn) return null;
+                    
+                    return {
+                        updateOne: {
+                            filter: { sessionId, lid },
+                            update: { $set: { jid: pn, name: c.name, pushName: c.notify } },
+                            upsert: true
+                        }
+                    };
+                }).filter(Boolean);
+                
+                if (contactDocs.length > 0) {
+                    await Contact.bulkWrite(contactDocs, { ordered: false }).catch(e => console.error(e));
+                }
+            }
+        } catch(e) {
+            console.error("Error saving contacts:", e);
         }
     });
 
