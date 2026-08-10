@@ -2,9 +2,11 @@
     import '../app.css';
     import { page } from '$app/stores';
 
-    // Svelte 5 runes mode - use $derived
+    const { children } = $props();
+
     let isAdmin = $derived($page.url.pathname.startsWith('/admin'));
     let isLogin = $derived($page.url.pathname.endsWith('/login') || $page.url.pathname === '/');
+
 </script>
 
 <svelte:head>
@@ -37,7 +39,7 @@
     {/if}
 
     <main class="main" class:main-fullscreen={isLogin}>
-        <slot />
+        {@render children()}
     </main>
 </div>
 
