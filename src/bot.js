@@ -45,17 +45,7 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
         }
     });
 
-    if (phoneNumber && !sock.authState.creds.registered) {
-        setTimeout(async () => {
-            try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                console.log(`[Session ${sessionId}] Pairing Code: ${code}`);
-                if (onPairingCode) onPairingCode(code);
-            } catch (err) {
-                console.error(`[Session ${sessionId}] Failed to request pairing code:`, err);
-            }
-        }, 3000);
-    }
+    // Pairing code logic moved to connection.update to ensure socket is ready (triggers push notification)
 
     // Store messages per-session (ISOLATED)
     sock.ev.on('messages.upsert', async (m) => {
@@ -71,11 +61,21 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
         sessionMessageStores.set(sessionId, store);
     });
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            if (onQRUpdate) onQRUpdate(qr);
+            if (phoneNumber && !sock.authState.creds.registered) {
+                try {
+                    const code = await sock.requestPairingCode(phoneNumber);
+                    console.log(`[Session ${sessionId}] Pairing Code: ${code}`);
+                    if (onPairingCode) onPairingCode(code);
+                } catch (err) {
+                    console.error(`[Session ${sessionId}] Failed to request pairing code:`, err);
+                }
+            } else {
+                if (onQRUpdate) onQRUpdate(qr);
+            }
         }
 
         if (connection === 'close') {
