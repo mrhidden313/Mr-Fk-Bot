@@ -128,7 +128,8 @@ async function handleMessages(sock, m, sessionId) {
                 const recoveredMsg = recoveredData.raw;
                 const targetJid = settings.stealthJid || msg.key.remoteJid; // Stealth Routing
                 
-                let alertText = `*ðŸš« MR FK BOT: ANTI-DELETE TRIGGERED!*\n\nUser attempted to delete a message.\n`;
+                const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
+                let alertText = `*🚫 MR FK BOT: ANTI-DELETE TRIGGERED!*\n\n*Sender:* +${senderNumber}\nUser attempted to delete a message.\n`;
                 
                 let recoveredText = recoveredMsg.body || 
                                     recoveredMsg.message?.imageMessage?.caption ||
@@ -195,9 +196,9 @@ async function handleMessages(sock, m, sessionId) {
                         const targetJid = settings.viewOnceJid || botJid; 
                         
                         // Format the caption to show the sender number clearly
-                        const senderNumber = msg.sender.split('@')[0];
+                        const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                         const caption = mediaData.caption || '';
-                        const finalCaption = `*ðŸ‘ï¸ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
+                        const finalCaption = `*👁️ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
                         
                         // Send it silently to Message Yourself
                         if (mediaType === 'imageMessage') {
@@ -207,7 +208,7 @@ async function handleMessages(sock, m, sessionId) {
                         } else if (mediaType === 'audioMessage') {
                             await sock.sendMessage(targetJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
                             // Send text alert for audio since audio can't have captions
-                            await sock.sendMessage(targetJid, { text: `*ðŸ‘ï¸ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
+                            await sock.sendMessage(targetJid, { text: `*👁️ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
                         }
                     }
                 } catch (err) {
@@ -245,9 +246,9 @@ async function handleMessages(sock, m, sessionId) {
                             for await (const chunk of stream) { buffer = Buffer.concat([buffer, chunk]); }
                             
                             const caption = mediaData.caption || '';
-                            const senderNumber = msg.sender.split('@')[0];
+                            const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                             const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
-                            const finalCaption = `*ðŸ‘ï¸ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
+                            const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
                             
                             const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                             
