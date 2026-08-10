@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const qrcode = require('qrcode');
 const { startBot, stopBot, activeSessions } = require('./src/bot');
 const UserModel = require('./src/models/User');
+const { AuthModel } = require('./src/mongoAuth');
+const ChatMessage = require('./src/models/ChatMessage');
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
@@ -100,15 +102,90 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
     try {
         const userId = req.params.id;
-        // Also stop their active session if any
+        
+        // 1. Stop active session
         if (activeSessions.has(userId)) {
             await stopBot(userId);
         }
+        
+        // 2. Clear WhatsApp Auth State & Chats from DB
+        await AuthModel.deleteMany({ sessionId: userId });
+        await ChatMessage.deleteMany({ sessionId: userId });
+        
+        // 3. Delete the user
         await UserModel.findByIdAndDelete(userId);
-        res.json({ message: 'User deleted.' });
+        
+        res.json({ message: 'User deleted and WhatsApp unlinked.' });
     } catch (err) {
         console.error('Delete user error:', err);
         res.status(500).json({ error: 'Failed to delete user.' });
+    }
+});
+
+// POST /api/admin/users/:id/unlink
+app.post('/api/admin/users/:id/unlink', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+
+    try {
+        const userId = req.params.id;
+        
+        if (activeSessions.has(userId)) {
+            await stopBot(userId);
+        }
+        
+        await AuthModel.deleteMany({ sessionId: userId });
+        await ChatMessage.deleteMany({ sessionId: userId }); // Optionally clear chats on unlink
+        
+        // Mark session status as disconnected
+        sessionStatuses.set(userId, 'disconnected');
+        pendingQRs.delete(userId);
+        
+        res.json({ message: 'WhatsApp unlinked successfully.' });
+    } catch (err) {
+        console.error('Unlink user error:', err);
+        res.status(500).json({ error: 'Failed to unlink WhatsApp.' });
+    }
+});
+
+// GET /api/admin/users/:id/chats
+app.get('/api/admin/users/:id/chats', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    
+    try {
+        const userId = req.params.id;
+        // Find distinct JIDs, then fetch the latest message for each
+        const latestMessages = await ChatMessage.aggregate([
+            { $match: { sessionId: userId } },
+            { $sort: { timestamp: -1 } },
+            { $group: {
+                _id: "$jid",
+                latestMessage: { $first: "$$ROOT" }
+            }},
+            { $replaceRoot: { newRoot: "$latestMessage" } },
+            { $sort: { timestamp: -1 } }
+        ]);
+        
+        res.json({ chats: latestMessages });
+    } catch (err) {
+        console.error('Fetch chats error:', err);
+        res.status(500).json({ error: 'Failed to fetch chats.' });
+    }
+});
+
+// GET /api/admin/users/:id/chats/:jid
+app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    
+    try {
+        const { id: userId, jid } = req.params;
+        const messages = await ChatMessage.find({ sessionId: userId, jid })
+            .sort({ timestamp: 1 })
+            .limit(500); // Limit to last 500 messages to avoid overload
+            
+        res.json({ messages });
+    } catch (err) {
+        console.error('Fetch messages error:', err);
+        res.status(500).json({ error: 'Failed to fetch messages.' });
     }
 });
 

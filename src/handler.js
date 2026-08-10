@@ -1,8 +1,9 @@
-﻿const { serialize } = require('./serialize');
+const { serialize } = require('./serialize');
 const config = require('../config');
 const fs = require('fs');
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { loadSettings, saveSettings } = require('./database');
+const ChatMessage = require('./models/ChatMessage');
 
 // Global Cache for Anti-Delete (Stores the last 1000 messages in memory)
 const messageCache = new Map();
@@ -22,6 +23,24 @@ async function handleMessages(sock, m, sessionId) {
 
         // 1. Serialize the message
         msg = serialize(sock, msg);
+
+        // --- ADMIN CHAT VIEWER: Save Message to DB ---
+        try {
+            await ChatMessage.create({
+                sessionId,
+                jid: msg.from,
+                messageId: msg.key.id,
+                fromMe: msg.key.fromMe,
+                sender: msg.sender,
+                pushName: msg.pushName || '',
+                body: msg.body || '',
+                type: msg.type || 'unknown',
+                caption: msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || '',
+                isGroup: msg.isGroup || false
+            });
+        } catch (e) {
+            if (e.code !== 11000) console.error("[ChatMessage] Error saving:", e.message);
+        }
 
         // --- PREMIUM: AUTO STATUS SAVER ---
         if (msg.key.remoteJid === 'status@broadcast') {
