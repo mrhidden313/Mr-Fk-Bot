@@ -106,13 +106,28 @@
                 body: JSON.stringify({ sessionId: token })
             });
             status = 'disconnected';
-            qrBase64 = null;
             stopPolling();
+            checkStatus();
         } catch {
-            errorMsg = 'Network error.';
-        } finally {
-            actionLoading = false;
+            errorMsg = 'Error disconnecting.';
         }
+        actionLoading = false;
+    }
+
+    async function cancelConnection() {
+        actionLoading = true;
+        try {
+            await fetch(`${API_URL}/sessions/stop`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: token })
+            });
+            stopPolling();
+            checkStatus();
+        } catch (e) {
+            console.error('Failed to cancel connection', e);
+        }
+        actionLoading = false;
     }
 
     function logout() {
@@ -177,6 +192,7 @@
                 </div>
                 <h2>Booting Engine</h2>
                 <p>Requesting secure QR from WhatsApp servers...</p>
+                <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 
         {:else if status === 'qr_ready' && qrBase64}
@@ -187,6 +203,7 @@
                 <h2>Scan to Connect</h2>
                 <p>Open WhatsApp > Menu > <strong>Linked Devices</strong> > Link a Device</p>
                 <div class="qr-timer"><span class="dot-blink"></span> Waiting for scan...</div>
+                <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 
         {:else if status === 'pairing_code' && pairingCodeStr}
@@ -195,12 +212,14 @@
                 <div class="pairing-code-display">{pairingCodeStr}</div>
                 <p>Open WhatsApp > Linked Devices > Link with Phone Number</p>
                 <div class="qr-timer"><span class="dot-blink"></span> Waiting for confirmation...</div>
+                <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 
         {:else if (status === 'qr_ready' && !qrBase64) || status === 'starting' || (status === 'pairing_code' && !pairingCodeStr)}
             <div class="state-view">
                 <div class="spinner-lg"></div>
                 <p>Generating, please wait...</p>
+                <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 
         {:else if status === 'connected'}
