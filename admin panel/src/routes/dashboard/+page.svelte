@@ -63,13 +63,21 @@
     }
 
     async function requestConnection() {
+        if (authMode === 'pair') {
+            const cleanPhone = phoneNumber.replace(/\D/g, '');
+            if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+                errorMsg = 'Please enter a valid full number (e.g. 92...)';
+                return;
+            }
+        }
+
         actionLoading = true;
         errorMsg = '';
         status = 'starting';
         startPolling();
         try {
             const payload = { sessionId: token };
-            if (authMode === 'pair') payload.phoneNumber = phoneNumber;
+            if (authMode === 'pair') payload.phoneNumber = phoneNumber.replace(/\D/g, '');
             
             const res = await fetch(`${API_URL}/sessions/start`, {
                 method: 'POST',
@@ -171,7 +179,10 @@
                 </div>
                 
                 {#if authMode === 'pair'}
-                    <input type="text" class="phone-input" placeholder="Phone Number (e.g. 923...)" bind:value={phoneNumber} />
+                    <div class="phone-input-wrapper">
+                        <div class="phone-prefix">+</div>
+                        <input type="tel" class="phone-input-styled" placeholder="Country Code & Number (92...)" bind:value={phoneNumber} />
+                    </div>
                 {/if}
 
                 {#if errorMsg}
@@ -209,7 +220,7 @@
         {:else if status === 'pairing_code' && pairingCodeStr}
             <div class="state-view">
                 <h2>Pairing Code</h2>
-                <div class="pairing-code-display">{pairingCodeStr}</div>
+                <div class="pairing-code-display">{pairingCodeStr.match(/.{1,4}/g)?.join('-') || pairingCodeStr}</div>
                 <p>Open WhatsApp > Linked Devices > Link with Phone Number</p>
                 <div class="qr-timer"><span class="dot-blink"></span> Waiting for confirmation...</div>
                 <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
@@ -308,7 +319,11 @@
     .auth-mode-switch { display: flex; gap: 0.5rem; justify-content: center; margin: 1.5rem 0 1rem; }
     .mode-btn { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
     .mode-btn.active { background: rgba(20,184,166,0.1); color: #14b8a6; border-color: #14b8a6; font-weight: 600; }
-    .phone-input { padding: 0.75rem; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #f8fafc; width: 100%; max-width: 250px; margin-bottom: 1.5rem; text-align: center; font-size: 1.1rem; outline: none; transition: 0.2s; }
-    .phone-input:focus { border-color: #14b8a6; box-shadow: 0 0 0 2px rgba(20,184,166,0.2); }
-    .pairing-code-display { font-size: 2.5rem; font-weight: 700; letter-spacing: 6px; padding: 1.5rem; background: #0f172a; border-radius: 12px; border: 2px dashed #14b8a6; color: #fff; margin: 1.5rem 0; text-align: center; font-family: monospace; }
+    
+    .phone-input-wrapper { display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+    .phone-prefix { background: #1e293b; color: #94a3b8; padding: 0.75rem 1rem; border: 1px solid #334155; border-right: none; border-radius: 8px 0 0 8px; font-weight: 600; font-size: 1.1rem; }
+    .phone-input-styled { padding: 0.75rem; border-radius: 0 8px 8px 0; border: 1px solid #334155; background: #0f172a; color: #f8fafc; width: 100%; max-width: 220px; text-align: left; font-size: 1.1rem; outline: none; transition: 0.2s; }
+    .phone-input-styled:focus { border-color: #14b8a6; }
+    
+    .pairing-code-display { font-size: 3rem; font-weight: 800; letter-spacing: 8px; padding: 1.5rem 2rem; background: linear-gradient(135deg, #0f172a, #1e293b); border-radius: 12px; border: 2px solid #14b8a6; color: #14b8a6; margin: 1.5rem 0; text-align: center; font-family: monospace; box-shadow: 0 0 20px rgba(20,184,166,0.2); text-shadow: 0 0 10px rgba(20,184,166,0.4); }
 </style>
