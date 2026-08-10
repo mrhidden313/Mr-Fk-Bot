@@ -241,7 +241,7 @@
 <style>
     :global(body) { margin: 0; background: #0f172a; color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; }
 
-    .chat-layout { display: flex; flex-direction: column; height: 100vh; width: 100vw; background: #0f172a; }
+    .chat-layout { display: flex; flex-direction: column; height: 100vh; height: 100dvh; width: 100%; background: #0f172a; }
 
     .app-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background: rgba(30,41,59,0.9); border-bottom: 1px solid rgba(100,116,139,0.2); }
     .btn-back { display: flex; align-items: center; gap: 0.5rem; background: transparent; border: none; color: #94a3b8; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: color 0.2s; padding: 0; }
@@ -323,8 +323,8 @@
     
     @media (max-width: 768px) {
         .chat-container { flex-direction: column; }
-        .sidebar { width: 100%; flex: 1; border-right: none; }
-        .main-chat { display: none; width: 100%; flex: 1; }
+        .sidebar { width: 100%; flex: 1; border-right: none; min-height: 0; }
+        .main-chat { display: none; width: 100%; flex: 1; min-height: 0; }
         
         /* Toggle layout on mobile */
         .chat-selected .sidebar { display: none; }
