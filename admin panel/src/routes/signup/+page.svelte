@@ -1,6 +1,5 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -9,19 +8,8 @@
 	let successMessage = $state('');
 	let isPendingApproval = $state(false);
 	let loading = $state(false);
-	let deviceId = $state('');
 
 	const API_URL = '/api';
-
-	onMount(() => {
-		// Generate or retrieve persistent Device Fingerprint ID
-		let existingDevId = localStorage.getItem('mr_device_id');
-		if (!existingDevId) {
-			existingDevId = 'dev_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-			localStorage.setItem('mr_device_id', existingDevId);
-		}
-		deviceId = existingDevId;
-	});
 
 	async function handleSignup() {
 		error = '';
@@ -50,8 +38,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					email: email.trim(),
-					password,
-					deviceId
+					password
 				})
 			});
 
@@ -67,7 +54,7 @@
 					isPendingApproval = true;
 					successMessage =
 						data.message ||
-						'Registration submitted! Your account is pending administrator approval.';
+						'Registration submitted! Multiple accounts were detected on your IP. Your account is pending administrator approval.';
 				} else {
 					// Auto-login active accounts
 					localStorage.setItem('userToken', data.token);

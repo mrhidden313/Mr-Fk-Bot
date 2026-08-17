@@ -369,7 +369,12 @@ app.delete('/api/admin/users/:id', async (req, res) => {
         await AuthModel.deleteMany({ sessionId: userId });
         await ChatMessage.deleteMany({ sessionId: userId });
 
-        // 3. Delete the user
+        // 3. Clear In-Memory session states
+        sessionStatuses.delete(userId);
+        pendingQRs.delete(userId);
+        pendingPairingCodes.delete(userId);
+
+        // 4. Delete the user doc
         await UserModel.findByIdAndDelete(userId);
 
         res.json({ message: 'User deleted and WhatsApp unlinked.' });
@@ -598,6 +603,22 @@ app.post('/api/sessions/start', authenticateUser, async (req, res) => {
 // GET /api/sessions/:id/status
 app.get('/api/sessions/:id/status', async (req, res) => {
     const sessionId = req.params.id;
+
+    // Verify user exists and is active in database (forces immediate auto-logout if deleted or disabled)
+    try {
+        if (/^[0-9a-fA-F]{24}$/.test(sessionId)) {
+            const user = await UserModel.findById(sessionId);
+            if (!user) {
+                return res.status(401).json({ error: 'User account no longer exists.', status: 'deleted' });
+            }
+            if (user.status === 'disabled') {
+                return res.status(403).json({ error: 'User account is disabled.', status: 'disabled' });
+            }
+            if (user.status === 'pending_approval') {
+                return res.status(403).json({ error: 'User account is pending approval.', status: 'pending' });
+            }
+        }
+    } catch (e) { }
 
     // Optional ownership check if token is provided
     const token = extractToken(req);
