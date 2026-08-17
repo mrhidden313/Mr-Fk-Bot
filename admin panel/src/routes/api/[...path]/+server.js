@@ -35,16 +35,20 @@ export async function OPTIONS({ params, request }) {
 }
 
 async function proxy(path, method, request, body) {
-    const url = `${VPS_BASE}/api/${path}`;
+    const reqUrl = new URL(request.url);
+    const queryString = reqUrl.search;
+    const url = `${VPS_BASE}/api/${path}${queryString}`;
 
     const headers = {};
     const contentType = request.headers.get('content-type');
     const auth = request.headers.get('authorization');
     const adminToken = request.headers.get('x-admin-token');
+    const authToken = request.headers.get('x-auth-token');
 
     if (contentType) headers['content-type'] = contentType;
     if (auth) headers['authorization'] = auth;
     if (adminToken) headers['x-admin-token'] = adminToken;
+    if (authToken) headers['x-auth-token'] = authToken;
 
     try {
         const res = await fetch(url, {

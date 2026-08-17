@@ -66,6 +66,7 @@
                     // Auto-login active accounts
                     localStorage.setItem('userToken', data.token);
                     localStorage.setItem('userEmail', data.email);
+                    if (data.userId) localStorage.setItem('userId', data.userId);
                     goto('/dashboard');
                 }
             } else {

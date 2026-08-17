@@ -3,6 +3,7 @@
     import { goto } from '$app/navigation';
 
     let token = $state('');
+    let userId = $state('');
     let userEmail = $state('');
     let status = $state('checking');
     let qrBase64 = $state(null);
@@ -17,6 +18,7 @@
 
     onMount(() => {
         token = localStorage.getItem('userToken') || '';
+        userId = localStorage.getItem('userId') || '';
         userEmail = localStorage.getItem('userEmail') || '';
         if (!token) { goto('/login'); return; }
         checkStatus();
@@ -24,9 +26,24 @@
 
     onDestroy(() => stopPolling());
 
+    function getSessionId() {
+        return userId || token;
+    }
+
+    function getAuthHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    }
+
     async function checkStatus() {
         try {
-            const res = await fetch(`${API_URL}/sessions/${token}/status`);
+            const sid = getSessionId();
+            const res = await fetch(`${API_URL}/sessions/${sid}/status`, {
+                headers: getAuthHeaders()
+            });
             if (!res.ok) {
                 if (res.status === 401 || res.status === 403) { logout(); return; }
                 errorMsg = `Server error (${res.status})`;
@@ -76,12 +93,13 @@
         status = 'starting';
         startPolling();
         try {
-            const payload = { sessionId: token };
+            const sid = getSessionId();
+            const payload = { sessionId: sid };
             if (authMode === 'pair') payload.phoneNumber = phoneNumber.replace(/\D/g, '');
             
             const res = await fetch(`${API_URL}/sessions/start`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify(payload)
             });
             let data;
@@ -108,10 +126,11 @@
         if (!confirm('Disconnect WhatsApp?')) return;
         actionLoading = true;
         try {
+            const sid = getSessionId();
             await fetch(`${API_URL}/sessions/stop`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: token })
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ sessionId: sid })
             });
             status = 'disconnected';
             stopPolling();
@@ -125,10 +144,11 @@
     async function cancelConnection() {
         actionLoading = true;
         try {
+            const sid = getSessionId();
             await fetch(`${API_URL}/sessions/stop`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionId: token })
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ sessionId: sid })
             });
             stopPolling();
             checkStatus();
@@ -150,6 +170,7 @@
         stopPolling();
         localStorage.removeItem('userToken');
         localStorage.removeItem('userEmail');
+        localStorage.removeItem('userId');
         goto('/login');
     }
 </script>

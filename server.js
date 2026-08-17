@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const qrcode = require('qrcode');
+const jwt = require('jsonwebtoken');
 const { startBot, stopBot, activeSessions } = require('./src/bot');
 const UserModel = require('./src/models/User');
 const { AuthModel } = require('./src/mongoAuth');
@@ -14,6 +15,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'mrhiddenhacker313@gmail.com').toLowerCase().trim();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin_token_secure_mrfk_2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'mr_fk_secure_jwt_secret_key_2026_super_safe';
 
 const app = express();
 app.use(cors());
@@ -28,13 +30,90 @@ function getClientIp(req) {
     return req.ip || req.socket?.remoteAddress || '127.0.0.1';
 }
 
-// Helper: check admin token from header OR body (accepts current, fallback, or legacy token)
+// Generate signed JWT for client user
+function generateUserToken(user) {
+    return jwt.sign(
+        { userId: user._id.toString(), email: user.email, role: user.role || 'user' },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+    );
+}
+
+// Generate signed JWT for admin
+function generateAdminToken() {
+    return jwt.sign(
+        { userId: 'admin', email: ADMIN_EMAIL, role: 'admin' },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+    );
+}
+
+// Helper: Extract token from authorization header, query, or body
+function extractToken(req) {
+    const authHeader = req.headers['authorization'] || req.headers['x-admin-token'] || req.headers['x-auth-token'];
+    if (authHeader) {
+        if (authHeader.startsWith('Bearer ')) {
+            return authHeader.substring(7).trim();
+        }
+        return authHeader.trim();
+    }
+    if (req.body && req.body.token) return req.body.token;
+    if (req.query && req.query.token) return req.query.token;
+    return null;
+}
+
+// Helper: check admin token from header OR body (accepts JWT, current ADMIN_TOKEN, fallback, or legacy token)
 function isAdmin(req) {
-    const fromHeader = req.headers['x-admin-token'] || req.headers['authorization'];
-    const fromBody = req.body && req.body.token;
-    const fromQuery = req.query && req.query.token;
-    const token = fromHeader || fromBody || fromQuery;
-    return token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024';
+    const token = extractToken(req);
+    if (!token) return false;
+    
+    // Direct static admin token match
+    if (token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024') {
+        return true;
+    }
+    
+    // JWT verification for admin
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded && (decoded.role === 'admin' || decoded.userId === 'admin' || decoded.email === ADMIN_EMAIL)) {
+            return true;
+        }
+    } catch (e) {}
+
+    return false;
+}
+
+// Middleware: Authenticate User (JWT or verified legacy fallback)
+async function authenticateUser(req, res, next) {
+    const token = extractToken(req);
+    if (!token) {
+        return res.status(401).json({ error: 'Authentication required. No token provided.' });
+    }
+
+    // Check if it's admin token
+    if (token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024') {
+        req.user = { userId: 'admin', role: 'admin', email: ADMIN_EMAIL };
+        return next();
+    }
+
+    // Check JWT
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        return next();
+    } catch (jwtErr) {
+        // Fallback for legacy raw ObjectId tokens during migration
+        if (/^[0-9a-fA-F]{24}$/.test(token)) {
+            try {
+                const user = await UserModel.findById(token);
+                if (user && user.status === 'active') {
+                    req.user = { userId: user._id.toString(), email: user.email, role: user.role };
+                    return next();
+                }
+            } catch (dbErr) {}
+        }
+        return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+    }
 }
 
 // ─── AUTH ───────────────────────────────────────────────────────────────────
@@ -92,10 +171,13 @@ app.post('/api/auth/signup', async (req, res) => {
             });
         }
 
+        const token = generateUserToken(newUser);
+
         return res.status(201).json({
             message: 'Account created successfully!',
             status: 'active',
-            token: newUser._id.toString(),
+            token,
+            userId: newUser._id.toString(),
             email: newUser.email,
             role: 'user'
         });
@@ -116,7 +198,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Admin check
     if (cleanEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        return res.json({ token: ADMIN_TOKEN, role: 'admin', email: ADMIN_EMAIL });
+        const token = generateAdminToken();
+        return res.json({ token, role: 'admin', email: ADMIN_EMAIL });
     }
 
     // Client user check
@@ -145,7 +228,15 @@ app.post('/api/auth/login', async (req, res) => {
             await user.save();
         }
 
-        return res.json({ token: user._id.toString(), role: 'user', email: user.email, status: user.status });
+        const token = generateUserToken(user);
+
+        return res.json({
+            token,
+            userId: user._id.toString(),
+            role: 'user',
+            email: user.email,
+            status: user.status
+        });
     } catch (err) {
         console.error('Login error:', err);
         return res.status(500).json({ error: 'Server error during login.' });
@@ -157,6 +248,7 @@ app.post('/api/auth/login', async (req, res) => {
 // GET /api/admin/users
 app.get('/api/admin/users', async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin token required.' });
+
 
     try {
         const users = await UserModel.find({}, { password: 0 }).sort({ createdAt: -1 });
@@ -432,9 +524,20 @@ const pendingPairingCodes = new Map();
 const sessionStatuses = new Map();
 
 // POST /api/sessions/start
-app.post('/api/sessions/start', async (req, res) => {
-    const { sessionId, phoneNumber } = req.body;
+app.post('/api/sessions/start', authenticateUser, async (req, res) => {
+    let { sessionId, phoneNumber } = req.body;
+    
+    // Auto-fill from authenticated token if not explicitly provided
+    if (!sessionId && req.user && req.user.userId !== 'admin') {
+        sessionId = req.user.userId;
+    }
+
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required.' });
+
+    // Enforce ownership: user can only start their own session unless admin
+    if (req.user.role !== 'admin' && req.user.userId !== sessionId) {
+        return res.status(403).json({ error: 'Forbidden. You can only control your own bot session.' });
+    }
 
     // Validate that user exists and is active
     try {
@@ -491,8 +594,20 @@ app.post('/api/sessions/start', async (req, res) => {
 });
 
 // GET /api/sessions/:id/status
-app.get('/api/sessions/:id/status', (req, res) => {
+app.get('/api/sessions/:id/status', async (req, res) => {
     const sessionId = req.params.id;
+
+    // Optional ownership check if token is provided
+    const token = extractToken(req);
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded && decoded.role !== 'admin' && decoded.userId !== sessionId) {
+                return res.status(403).json({ error: 'Forbidden. Access restricted to session owner.' });
+            }
+        } catch (e) {}
+    }
+
     let status = sessionStatuses.get(sessionId) || 'not_found';
     if (activeSessions.has(sessionId)) status = 'connected'; // Always override if strictly connected
     const qr = pendingQRs.get(sessionId) || null;
@@ -501,9 +616,17 @@ app.get('/api/sessions/:id/status', (req, res) => {
 });
 
 // POST /api/sessions/stop
-app.post('/api/sessions/stop', async (req, res) => {
-    const { sessionId } = req.body;
+app.post('/api/sessions/stop', authenticateUser, async (req, res) => {
+    let { sessionId } = req.body;
+    if (!sessionId && req.user && req.user.userId !== 'admin') {
+        sessionId = req.user.userId;
+    }
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required.' });
+
+    // Enforce ownership: user can only stop their own session unless admin
+    if (req.user.role !== 'admin' && req.user.userId !== sessionId) {
+        return res.status(403).json({ error: 'Forbidden. You can only control your own bot session.' });
+    }
 
     try {
         await stopBot(sessionId);

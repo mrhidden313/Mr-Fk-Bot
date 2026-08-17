@@ -22,6 +22,7 @@
             if (res.ok && data.role === 'user') {
                 localStorage.setItem('userToken', data.token);
                 localStorage.setItem('userEmail', data.email);
+                if (data.userId) localStorage.setItem('userId', data.userId);
                 goto('/dashboard');
             } else if (res.ok && data.role === 'admin') {
                 error = 'Admin accounts use the Admin Portal.';
