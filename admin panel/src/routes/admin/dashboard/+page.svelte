@@ -215,6 +215,10 @@
             <p>Manage SaaS Clients, IP Approvals & Access Control</p>
         </div>
         <div class="topbar-right">
+            <a href="/admin/automation" class="btn-automation">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                Automation
+            </a>
             <button class="btn-primary" onclick={() => { showCreateModal = true; createMessage = ''; createError = ''; }}>
                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 New Client
@@ -500,6 +504,9 @@
     .topbar-left p { font-size: 0.95rem; color: #94a3b8; margin: 0; }
     
     .topbar-right { display: flex; gap: 1rem; align-items: center; }
+
+    .btn-automation { padding: 0.6rem 1.15rem; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; text-decoration: none; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+    .btn-automation:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.45); color: white; }
 
     .btn-primary { padding: 0.6rem 1.25rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
     .btn-primary:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }

