@@ -299,9 +299,14 @@
                 <h2 class="card-title" style="margin:0">
                     Client List
                 </h2>
-                <button class="btn-refresh" onclick={fetchUsers} disabled={pageLoading}>
-                    {pageLoading ? '...' : '↻ Refresh Data'}
-                </button>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <a href="/admin/automation" class="btn-automation-sm">
+                        ⚡ Multi-Bot Automation
+                    </a>
+                    <button class="btn-refresh" onclick={fetchUsers} disabled={pageLoading}>
+                        {pageLoading ? '...' : '↻ Refresh Data'}
+                    </button>
+                </div>
             </div>
 
             {#if pageLoading}
@@ -507,6 +512,9 @@
 
     .btn-automation { padding: 0.6rem 1.15rem; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; text-decoration: none; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
     .btn-automation:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.45); color: white; }
+
+    .btn-automation-sm { padding: 0.45rem 0.9rem; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; box-shadow: 0 4px 12px rgba(99,102,241,0.3); transition: all 0.2s; }
+    .btn-automation-sm:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.45); color: white; }
 
     .btn-primary { padding: 0.6rem 1.25rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
     .btn-primary:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
