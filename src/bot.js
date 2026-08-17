@@ -1,6 +1,6 @@
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const { handleMessages } = require('./handler');
+const { handleMessages, clearSessionCache } = require('./handler');
 const { useMongoDBAuthState, AuthModel } = require('./mongoAuth');
 const ChatMessage = require('./models/ChatMessage');
 const Contact = require('./models/Contact');
@@ -331,6 +331,7 @@ async function stopBot(sessionId) {
         }
         activeSessions.delete(sessionId);
         sessionMessageStores.delete(sessionId); // Clean up memory
+        clearSessionCache(sessionId); // Clean up Anti-Delete cache
         console.log(`[Session ${sessionId}] Stopped and cleaned up.`);
     }
 }

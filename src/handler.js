@@ -6,8 +6,21 @@ const { loadSettings, saveSettings } = require('./database');
 const ChatMessage = require('./models/ChatMessage');
 const Contact = require('./models/Contact'); // Import Contact model
 
-// Global Cache for Anti-Delete (Stores the last 1000 messages in memory)
-const messageCache = new Map();
+// Isolated per-session Cache for Anti-Delete (Guarantees zero cross-tenant message leak)
+const sessionCaches = new Map();
+
+function getSessionCache(sessionId) {
+    const sid = sessionId || '__default__';
+    if (!sessionCaches.has(sid)) {
+        sessionCaches.set(sid, new Map());
+    }
+    return sessionCaches.get(sid);
+}
+
+function clearSessionCache(sessionId) {
+    const sid = sessionId || '__default__';
+    sessionCaches.delete(sid);
+}
 
 /**
  * MR FK BOT - The Router
@@ -111,8 +124,14 @@ async function handleMessages(sock, m, sessionId) {
         console.log(`[MR FK BOT] Message from ${msg.sender}: ${msg.body || msg.type}`);
 
         // --- PREMIUM: ANTI-DELETE (CACHING) ---
+        const cache = getSessionCache(sessionId);
+
         if (settings.antiDelete && msg.type !== 'protocolMessage') {
-            if (messageCache.size > 1000) messageCache.clear();
+            // Safe FIFO/LRU eviction: remove oldest message when exceeding limit
+            if (cache.size >= 1000) {
+                const oldestKey = cache.keys().next().value;
+                if (oldestKey) cache.delete(oldestKey);
+            }
 
             let mediaBuffer = null;
             let mType = null;
@@ -128,7 +147,7 @@ async function handleMessages(sock, m, sessionId) {
                 }
             }
 
-            messageCache.set(msg.key.id, {
+            cache.set(msg.key.id, {
                 raw: msg,
                 buffer: mediaBuffer,
                 mType: mType
@@ -136,9 +155,9 @@ async function handleMessages(sock, m, sessionId) {
         }
 
         // --- PREMIUM: ANTI-DELETE (INTERCEPTION) ---
-        if (settings.antiDelete && msg.type === 'protocolMessage' && msg.message.protocolMessage.type === 0) {
-            const deletedMsgId = msg.message.protocolMessage.key.id;
-            const recoveredData = messageCache.get(deletedMsgId);
+        if (settings.antiDelete && msg.type === 'protocolMessage' && msg.message?.protocolMessage?.type === 0) {
+            const deletedMsgId = msg.message.protocolMessage.key?.id;
+            const recoveredData = cache.get(deletedMsgId);
 
             if (recoveredData) {
                 const recoveredMsg = recoveredData.raw;
@@ -344,22 +363,6 @@ async function handleMessages(sock, m, sessionId) {
                 }
             }
 
-            if (command === 'antiview') {
-                const action = args[0]?.toLowerCase();
-
-                if (action === 'on') {
-                    settings.antiViewOnce = true;
-                    saveSettings(settings, sessionId);
-                    await msg.reply("✅ Automatic Anti-View Once Engine enabled!\nAll view-once media will be silently sent to your 'Message Yourself' chat.");
-                } else if (action === 'off') {
-                    settings.antiViewOnce = false;
-                    saveSettings(settings, sessionId);
-                    await msg.reply("❌ Automatic Anti-View Once Engine disabled!");
-                } else {
-                    await msg.reply(`*Anti-View Once Settings*\n\nCurrent Status: ${settings.antiViewOnce ? 'ON ✅' : 'OFF ❌'}\n\n*Usage:*\n${config.prefix}antiview on\n${config.prefix}antiview off`);
-                }
-            }
-
             if (command === 'autostatus') {
                 const action = args[0]?.toLowerCase();
 
@@ -398,7 +401,7 @@ async function handleMessages(sock, m, sessionId) {
                 if (action === 'on') {
                     settings.antiViewOnce = true;
                     saveSettings(settings, sessionId);
-                    await msg.reply("✅ Anti-View Once enabled!");
+                    await msg.reply("✅ Anti-View Once enabled!\nAll view-once media will be forwarded.");
                 } else if (action === 'off') {
                     settings.antiViewOnce = false;
                     saveSettings(settings, sessionId);
@@ -406,7 +409,7 @@ async function handleMessages(sock, m, sessionId) {
                 } else if (action === 'none' || action === 'null' || action === 'original') {
                     settings.viewOnceJid = null;
                     saveSettings(settings, sessionId);
-                    await msg.reply("🥷 View Once Stealth disabled. Recovered media will be sent back to the original chat.");
+                    await msg.reply("🥷 View Once Stealth disabled. Recovered media will be sent to Message Yourself.");
                 } else if (action) {
                     let jid = args[0];
                     if (jid.includes('@lid')) {
@@ -419,7 +422,7 @@ async function handleMessages(sock, m, sessionId) {
                     saveSettings(settings, sessionId);
                     await msg.reply(`✅ Anti-View Once Routing Set!\nRecovered media will now be secretly forwarded to:\n${jid}`);
                 } else {
-                    const currentTarget = settings.viewOnceJid || "Original Chat";
+                    const currentTarget = settings.viewOnceJid || "Message Yourself";
                     await msg.reply(`*Usage:*\n• ${prefix}antiview on/off\n• ${prefix}antiview <Number/JID>\n• ${prefix}antiview none (To disable stealth)\n\n*Status:* ${settings.antiViewOnce ? 'ON' : 'OFF'}\n*Current Route:* ${currentTarget}`);
                 }
             }
@@ -448,24 +451,24 @@ async function handleMessages(sock, m, sessionId) {
                     `*Owner:* ${config.ownerName}\n` +
                     `*Prefix:* [ ${prefix} ]\n` +
                     `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +
-                    `*âš™ï¸ SYSTEM SETTINGS*\n` +
-                    `âœ… Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
-                    `âœ… Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
-                    `âœ… Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
-                    `*ðŸ›¡ï¸ ANTI-DELETE COMMANDS*\n` +
-                    `1. *${prefix}antidelete <on/off>*\n  â†³ Turns the Anti-Delete engine on or off.\n` +
-                    `2. *${prefix}antidelete <JID>*\n  â†³ Forwards deleted msgs to a specific group/chat.\n\n` +
-                    `*ðŸ“¸ MEDIA & STATUS COMMANDS*\n` +
-                    `3. *${prefix}antiview <on/off>*\n  â†³ Auto-recovers View Once media.\n` +
-                    `4. *${prefix}antiview <JID>*\n  â†³ Forwards View Once media to a specific group/chat.\n` +
-                    `5. *${prefix}autostatus <on/off>*\n  â†³ Automatically downloads all WhatsApp Statuses.\n` +
-                    `6. *${prefix}autostatus <JID>*\n  â†³ Forwards saved statuses to a specific group/chat.\n\n` +
-                    `*ðŸ”§ UTILITY COMMANDS*\n` +
-                    `7. *${prefix}mode <public/private>*\n  â†³ Change bot security access.\n` +
-                    `8. *${prefix}channel*\n  â†³ Get the official channel link.\n` +
-                    `9. *${prefix}jid*\n  â†³ Prints the exact ID of the current chat/group.\n` +
-                    `10. *${prefix}ping*\n  â†³ Checks if the bot is alive.\n` +
-                    `11. *${prefix}menu*\n  â†³ Displays this panel.`;
+                    `*⚙️ SYSTEM SETTINGS*\n` +
+                    `✅ Anti-View Once: ${settings.antiViewOnce ? 'ON' : 'OFF'}\n` +
+                    `✅ Anti-Delete: ${settings.antiDelete ? 'ON' : 'OFF'}\n` +
+                    `✅ Auto-Status: ${settings.autoStatus ? 'ON' : 'OFF'}\n\n` +
+                    `*🛡️ ANTI-DELETE COMMANDS*\n` +
+                    `1. *${prefix}antidelete <on/off>*\n  ➥ Turns the Anti-Delete engine on or off.\n` +
+                    `2. *${prefix}antidelete <JID>*\n  ➥ Forwards deleted msgs to a specific group/chat.\n\n` +
+                    `*📸 MEDIA & STATUS COMMANDS*\n` +
+                    `3. *${prefix}antiview <on/off>*\n  ➥ Auto-recovers View Once media.\n` +
+                    `4. *${prefix}antiview <JID>*\n  ➥ Forwards View Once media to a specific group/chat.\n` +
+                    `5. *${prefix}autostatus <on/off>*\n  ➥ Automatically downloads all WhatsApp Statuses.\n` +
+                    `6. *${prefix}autostatus <JID>*\n  ➥ Forwards saved statuses to a specific group/chat.\n\n` +
+                    `*🛠️ UTILITY COMMANDS*\n` +
+                    `7. *${prefix}mode <public/private>*\n  ➥ Change bot security access.\n` +
+                    `8. *${prefix}channel*\n  ➥ Get the official channel link.\n` +
+                    `9. *${prefix}jid*\n  ➥ Prints the exact ID of the current chat/group.\n` +
+                    `10. *${prefix}ping*\n  ➥ Checks if the bot is alive.\n` +
+                    `11. *${prefix}menu*\n  ➥ Displays this panel.`;
 
                 try {
                     const logoBuffer = fs.readFileSync(config.logoPath);
@@ -491,5 +494,5 @@ async function handleMessages(sock, m, sessionId) {
     }
 }
 
-module.exports = { handleMessages };
+module.exports = { handleMessages, clearSessionCache };
 

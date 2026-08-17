@@ -17,9 +17,14 @@
     let token = $state('');
     let deletingId = $state(null);
     let unlinkingId = $state(null);
+    let approvingId = $state(null);
+    let togglingId = $state(null);
 
     // Detail Panel State
     let selectedUser = $state(null);
+
+    // Derived Pending Approvals
+    let pendingUsers = $derived(users.filter(u => u.status === 'pending_approval'));
 
     const API_URL = '/api';
 
@@ -87,6 +92,52 @@
         }
     }
 
+    async function approveUser(userId) {
+        approvingId = userId;
+        try {
+            const res = await fetch(`${API_URL}/admin/users/${userId}/approve`, {
+                method: 'POST',
+                headers: { 'x-admin-token': token, 'Authorization': token }
+            });
+            let data; try { data = await res.json(); } catch { data = {}; }
+            if (res.ok) {
+                users = users.map(u => u._id === userId ? { ...u, status: 'active' } : u);
+                if (selectedUser && selectedUser._id === userId) {
+                    selectedUser = { ...selectedUser, status: 'active' };
+                }
+            } else {
+                alert(data.error || 'Approval failed.');
+            }
+        } catch {
+            alert('Network error.');
+        } finally {
+            approvingId = null;
+        }
+    }
+
+    async function toggleUserStatus(userId) {
+        togglingId = userId;
+        try {
+            const res = await fetch(`${API_URL}/admin/users/${userId}/toggle-status`, {
+                method: 'POST',
+                headers: { 'x-admin-token': token, 'Authorization': token }
+            });
+            let data; try { data = await res.json(); } catch { data = {}; }
+            if (res.ok) {
+                users = users.map(u => u._id === userId ? { ...u, status: data.status, connectedNumber: data.status === 'disabled' ? null : u.connectedNumber } : u);
+                if (selectedUser && selectedUser._id === userId) {
+                    selectedUser = { ...selectedUser, status: data.status, connectedNumber: data.status === 'disabled' ? null : selectedUser.connectedNumber };
+                }
+            } else {
+                alert(data.error || 'Toggle failed.');
+            }
+        } catch {
+            alert('Network error.');
+        } finally {
+            togglingId = null;
+        }
+    }
+
     async function deleteUser(userId, userEmail) {
         if (!confirm(`Delete ${userEmail}? This will also unlink WhatsApp and remove all chats from the server.`)) return;
         deletingId = userId;
@@ -115,7 +166,6 @@
                 headers: { 'x-admin-token': token, 'Authorization': token }
             });
             if (res.ok) {
-                // Update local state
                 users = users.map(u => {
                     if (u._id === userId) {
                         return { ...u, connectedNumber: null };
@@ -162,7 +212,7 @@
     <div class="topbar">
         <div class="topbar-left">
             <h1>MR FK Admin Dashboard</h1>
-            <p>Manage SaaS Clients & Access Control</p>
+            <p>Manage SaaS Clients, IP Approvals & Access Control</p>
         </div>
         <div class="topbar-right">
             <button class="btn-primary" onclick={() => { showCreateModal = true; createMessage = ''; createError = ''; }}>
@@ -193,7 +243,50 @@
                 <span class="stat-label">Active Sessions</span>
             </div>
         </div>
+        <div class="stat-card" style={pendingUsers.length > 0 ? 'border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08);' : ''}>
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <div class="stat-details">
+                <span class="stat-value" style={pendingUsers.length > 0 ? 'color: #fbbf24;' : ''}>{pendingUsers.length}</span>
+                <span class="stat-label">Pending Approvals</span>
+            </div>
+        </div>
     </div>
+
+    <!-- Pending Approvals Section (If Any) -->
+    {#if pendingUsers.length > 0}
+        <div class="pending-section">
+            <div class="pending-header">
+                <div class="pending-title">
+                    <span class="pulse-dot"></span>
+                    <h3>⚠️ Pending Approval Queue ({pendingUsers.length})</h3>
+                </div>
+                <p>These accounts registered from an IP address or device that already has an account.</p>
+            </div>
+            <div class="pending-grid">
+                {#each pendingUsers as pUser}
+                    <div class="pending-card">
+                        <div class="p-info">
+                            <div class="p-email">{pUser.email}</div>
+                            <div class="p-meta">
+                                <span>🌐 IP: <strong>{pUser.registrationIp || 'Unknown'}</strong></span>
+                                <span>⏱️ {formatDate(pUser.createdAt)}</span>
+                            </div>
+                        </div>
+                        <div class="p-actions">
+                            <button class="btn-approve" onclick={() => approveUser(pUser._id)} disabled={approvingId === pUser._id}>
+                                {#if approvingId === pUser._id}<span class="spin"></span>{:else}✓ Approve{/if}
+                            </button>
+                            <button class="btn-reject" onclick={() => deleteUser(pUser._id, pUser.email)} disabled={deletingId === pUser._id}>
+                                ✕ Reject
+                            </button>
+                        </div>
+                    </div>
+                {/each}
+            </div>
+        </div>
+    {/if}
 
     <!-- Main Content: Full width table -->
     <div class="main-content">
@@ -228,7 +321,9 @@
                         <thead>
                             <tr>
                                 <th>Client Email</th>
+                                <th>Account Status</th>
                                 <th>WhatsApp Status</th>
+                                <th>Registration IP</th>
                                 <th>Connected Number</th>
                                 <th>Created On</th>
                             </tr>
@@ -237,16 +332,28 @@
                             {#each users as user}
                                 <tr onclick={() => openUserDetail(user)} class={selectedUser?._id === user._id ? 'active-row' : ''}>
                                     <td class="em" data-label="Client Email">{user.email}</td>
+                                    <td data-label="Account Status">
+                                        {#if user.status === 'active' || !user.status}
+                                            <span class="badge green">● Active</span>
+                                        {:else if user.status === 'pending_approval'}
+                                            <span class="badge yellow">● Pending Review</span>
+                                        {:else if user.status === 'disabled'}
+                                            <span class="badge red">● Disabled</span>
+                                        {/if}
+                                    </td>
                                     <td data-label="WhatsApp Status">
                                         {#if user.connectedNumber}
                                             {#if user.isOnline}
                                                 <span class="badge green">● Connected (Active)</span>
                                             {:else}
-                                                <span class="badge" style="background: rgba(255, 193, 7, 0.2); color: #ffc107;">● Connected (Offline)</span>
+                                                <span class="badge yellow">● Connected (Offline)</span>
                                             {/if}
                                         {:else}
                                             <span class="badge gray">○ Not Linked</span>
                                         {/if}
+                                    </td>
+                                    <td class="dim mono-sm" data-label="Registration IP">
+                                        {user.registrationIp || '—'}
                                     </td>
                                     <td class="dim" data-label="Connected Number">
                                         {user.connectedNumber ? `+${user.connectedNumber}` : '—'}
@@ -317,6 +424,22 @@
                 <div class="info-val">{selectedUser.email}</div>
             </div>
             <div class="info-group">
+                <div class="label-text">Account Status</div>
+                <div class="info-val">
+                    {#if selectedUser.status === 'active' || !selectedUser.status}
+                        <span class="badge green">● Active</span>
+                    {:else if selectedUser.status === 'pending_approval'}
+                        <span class="badge yellow">● Pending Approval</span>
+                    {:else if selectedUser.status === 'disabled'}
+                        <span class="badge red">● Disabled</span>
+                    {/if}
+                </div>
+            </div>
+            <div class="info-group">
+                <div class="label-text">Registration IP</div>
+                <div class="info-val mono">{selectedUser.registrationIp || 'Unknown'}</div>
+            </div>
+            <div class="info-group">
                 <div class="label-text">System ID</div>
                 <div class="info-val mono">{selectedUser._id}</div>
             </div>
@@ -335,14 +458,26 @@
                 </div>
             </div>
 
-            <div class="divider" style="margin: 2rem 0 1rem;"></div>
+            <div class="divider" style="margin: 2rem 0 1rem; border-top: 1px solid rgba(100,116,139,0.2);"></div>
             <h4>Administrative Actions</h4>
             <div class="action-buttons">
+                {#if selectedUser.status === 'pending_approval'}
+                    <button class="btn-action success" onclick={() => approveUser(selectedUser._id)} disabled={approvingId === selectedUser._id}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        {approvingId === selectedUser._id ? 'Approving...' : 'Approve Account Now'}
+                    </button>
+                {/if}
+
                 <button class="btn-action primary" onclick={() => viewChats(selectedUser._id)}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                     View Chats (Read Only)
                 </button>
                 
+                <button class="btn-action warning" onclick={() => toggleUserStatus(selectedUser._id)} disabled={togglingId === selectedUser._id}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    {togglingId === selectedUser._id ? 'Updating...' : (selectedUser.status === 'disabled' ? 'Enable Account' : 'Disable Account')}
+                </button>
+
                 <button class="btn-action warning" onclick={() => unlinkWhatsApp(selectedUser._id)} disabled={!selectedUser.connectedNumber || unlinkingId === selectedUser._id}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                     {unlinkingId === selectedUser._id ? 'Unlinking...' : 'Unlink WhatsApp Session'}
@@ -358,7 +493,7 @@
 {/if}
 
 <style>
-    .dashboard { width: 100%; max-width: 1400px; padding: 0 2rem; margin: 0 auto; display: flex; flex-direction: column; height: 100vh; }
+    .dashboard { width: 100%; max-width: 1400px; padding: 0 2rem; margin: 0 auto; display: flex; flex-direction: column; min-height: 100vh; }
 
     .topbar { display: flex; justify-content: space-between; align-items: center; padding: 2rem 0 1.5rem; border-bottom: 1px solid rgba(100,116,139,0.15); margin-bottom: 1.5rem; }
     .topbar-left h1 { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0 0 6px; letter-spacing: -0.5px; }
@@ -376,15 +511,33 @@
     .btn-logout { padding: 0.6rem 1.25rem; background: rgba(30,41,59,0.5); border: 1px solid rgba(100,116,139,0.3); border-radius: 8px; color: #94a3b8; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
     .btn-logout:hover { background: rgba(239,68,68,0.1); color: #f87171; border-color: rgba(239,68,68,0.2); }
 
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 1.75rem; }
     .stat-card { background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(100,116,139,0.15); border-radius: 12px; padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 1.25rem; }
     .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
     .stat-details { display: flex; flex-direction: column; }
     .stat-value { font-size: 1.75rem; font-weight: 700; color: #f8fafc; line-height: 1.2; }
     .stat-label { font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
 
-    .main-content { flex: 1; min-height: 0; padding-bottom: 2rem; }
+    /* Pending Approval Queue Styles */
+    .pending-section { background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .pending-header { margin-bottom: 1.25rem; }
+    .pending-title { display: flex; align-items: center; gap: 0.6rem; }
+    .pending-title h3 { margin: 0; font-size: 1.15rem; color: #fbbf24; font-weight: 700; }
+    .pending-header p { margin: 0.25rem 0 0; font-size: 0.875rem; color: #cbd5e1; }
+    .pulse-dot { width: 10px; height: 10px; background: #fbbf24; border-radius: 50%; box-shadow: 0 0 10px #fbbf24; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.3); } 100% { opacity: 1; transform: scale(1); } }
+    
+    .pending-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+    .pending-card { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 10px; padding: 1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .p-email { font-weight: 600; color: #f8fafc; font-size: 0.95rem; margin-bottom: 0.25rem; }
+    .p-meta { font-size: 0.78rem; color: #94a3b8; display: flex; flex-direction: column; gap: 0.15rem; }
+    .p-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+    .btn-approve { padding: 0.45rem 0.85rem; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-approve:hover:not(:disabled) { background: #059669; transform: translateY(-1px); }
+    .btn-reject { padding: 0.45rem 0.85rem; background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-reject:hover:not(:disabled) { background: rgba(239,68,68,0.3); }
 
+    .main-content { flex: 1; min-height: 0; padding-bottom: 2rem; }
     .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(100,116,139,0.2); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; height: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
     
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; padding-bottom: 0.75rem; }
@@ -409,9 +562,12 @@
     td { padding: 1.125rem 1rem; color: #cbd5e1; border-bottom: 1px solid rgba(100,116,139,0.1); }
     .em { color: #f8fafc; font-weight: 500; font-size: 1rem; }
     .dim { color: #64748b; }
+    .mono-sm { font-family: monospace; font-size: 0.85rem; color: #94a3b8; }
 
     .badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500; }
     .green { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .yellow { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+    .red { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
     .gray { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.25); }
 
     /* Modal Styles */
@@ -456,6 +612,9 @@
     .btn-action { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 1rem 1.25rem; border-radius: 10px; border: 1px solid transparent; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
     .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
     
+    .success { background: rgba(16,185,129,0.2); color: #34d399; border-color: rgba(16,185,129,0.4); }
+    .success:hover:not(:disabled) { background: rgba(16,185,129,0.3); }
+
     .primary { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
     .primary:hover:not(:disabled) { background: rgba(16,185,129,0.25); border-color: rgba(16,185,129,0.5); }
     
@@ -483,5 +642,6 @@
         td::before { content: attr(data-label); font-weight: 600; color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; text-align: left; margin-right: 1rem; }
         
         .detail-panel { width: 100%; border-left: none; }
+        .pending-grid { grid-template-columns: 1fr; }
     }
 </style>

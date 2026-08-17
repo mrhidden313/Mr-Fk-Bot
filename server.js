@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -10,24 +11,99 @@ const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
-const ADMIN_EMAIL = 'mrhiddenhacker313@gmail.com';
-const ADMIN_PASSWORD = 'admin123';
-const ADMIN_TOKEN = 'admin_token_secure';
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'mrhiddenhacker313@gmail.com').toLowerCase().trim();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin_token_secure_mrfk_2024';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper: check admin token from header OR body (accepts both old and new token)
+// Helper: Extract real client IP address (supporting proxies & load balancers)
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+        return forwarded.split(',')[0].trim();
+    }
+    return req.ip || req.socket?.remoteAddress || '127.0.0.1';
+}
+
+// Helper: check admin token from header OR body (accepts current, fallback, or legacy token)
 function isAdmin(req) {
     const fromHeader = req.headers['x-admin-token'] || req.headers['authorization'];
     const fromBody = req.body && req.body.token;
     const fromQuery = req.query && req.query.token;
     const token = fromHeader || fromBody || fromQuery;
-    return token === ADMIN_TOKEN || token === 'admin_token_secure_mrfk_2024';
+    return token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024';
 }
 
 // ─── AUTH ───────────────────────────────────────────────────────────────────
+
+// POST /api/auth/signup (Public Registration with IP & Device Multi-Account Detection)
+app.post('/api/auth/signup', async (req, res) => {
+    const { email, password, deviceId } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    try {
+        const cleanEmail = email.toLowerCase().trim();
+        const existingUser = await UserModel.findOne({ email: cleanEmail });
+        if (existingUser) {
+            return res.status(400).json({ error: 'An account with this email already exists.' });
+        }
+
+        const clientIp = getClientIp(req);
+        let isDuplicate = false;
+
+        // Check if another account already exists from this IP
+        if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1' && clientIp !== 'unknown') {
+            const existingIp = await UserModel.findOne({ registrationIp: clientIp });
+            if (existingIp) isDuplicate = true;
+        }
+
+        // Check if another account already exists from this Device ID
+        if (deviceId) {
+            const existingDevice = await UserModel.findOne({ deviceId });
+            if (existingDevice) isDuplicate = true;
+        }
+
+        const status = isDuplicate ? 'pending_approval' : 'active';
+
+        const newUser = new UserModel({
+            email: cleanEmail,
+            password,
+            role: 'user',
+            status,
+            registrationIp: clientIp,
+            deviceId: deviceId || null,
+            approvedAt: status === 'active' ? new Date() : null
+        });
+        await newUser.save();
+
+        if (status === 'pending_approval') {
+            return res.status(201).json({
+                message: 'Account registered! Multiple accounts were detected from this network/device. Your account is pending administrator approval.',
+                status: 'pending_approval',
+                email: newUser.email
+            });
+        }
+
+        return res.status(201).json({
+            message: 'Account created successfully!',
+            status: 'active',
+            token: newUser._id.toString(),
+            email: newUser.email,
+            role: 'user'
+        });
+    } catch (err) {
+        console.error('Signup error:', err);
+        return res.status(500).json({ error: 'Server error during registration.' });
+    }
+});
 
 // POST /api/auth/login
 app.post('/api/auth/login', async (req, res) => {
@@ -36,21 +112,40 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(400).json({ error: 'Email and password are required.' });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+
     // Admin check
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        return res.json({ token: ADMIN_TOKEN, role: 'admin', email });
+    if (cleanEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+        return res.json({ token: ADMIN_TOKEN, role: 'admin', email: ADMIN_EMAIL });
     }
 
     // Client user check
     try {
-        const user = await UserModel.findOne({ email: email.toLowerCase().trim() });
+        const user = await UserModel.findOne({ email: cleanEmail });
         if (!user) {
             return res.status(401).json({ error: 'No account found with this email.' });
         }
-        if (user.password !== password) {
+        
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
             return res.status(401).json({ error: 'Incorrect password.' });
         }
-        return res.json({ token: user._id.toString(), role: 'user', email: user.email });
+
+        // Check Account Status
+        if (user.status === 'pending_approval') {
+            return res.status(403).json({ error: 'Your account is pending administrator approval. Please wait or contact admin.' });
+        }
+        if (user.status === 'disabled') {
+            return res.status(403).json({ error: 'Your account has been disabled by the administrator.' });
+        }
+
+        // Transparent auto-upgrade of legacy plaintext password to bcrypt hash
+        if (!user.password.startsWith('$2a$') && !user.password.startsWith('$2b$')) {
+            user.password = password; // pre-save hook will automatically hash it
+            await user.save();
+        }
+
+        return res.json({ token: user._id.toString(), role: 'user', email: user.email, status: user.status });
     } catch (err) {
         console.error('Login error:', err);
         return res.status(500).json({ error: 'Server error during login.' });
@@ -104,19 +199,65 @@ app.post('/api/admin/users/create', async (req, res) => {
     }
 
     try {
-        const existing = await UserModel.findOne({ email: email.toLowerCase().trim() });
+        const cleanEmail = email.toLowerCase().trim();
+        const existing = await UserModel.findOne({ email: cleanEmail });
         if (existing) {
             return res.status(400).json({ error: `User "${email}" already exists.` });
         }
-        const newUser = await UserModel.create({
-            email: email.toLowerCase().trim(),
+        const newUser = new UserModel({
+            email: cleanEmail,
             password,
-            role: 'user'
+            role: 'user',
+            status: 'active',
+            approvedAt: new Date()
         });
-        res.json({ message: 'User created successfully!', user: { _id: newUser._id, email: newUser.email } });
+        await newUser.save();
+        res.json({ message: 'User created successfully!', user: { _id: newUser._id, email: newUser.email, status: newUser.status } });
     } catch (err) {
         console.error('Create user error:', err);
         res.status(500).json({ error: 'Server error while creating user.' });
+    }
+});
+
+// POST /api/admin/users/:id/approve (Approve pending account)
+app.post('/api/admin/users/:id/approve', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+
+    try {
+        const user = await UserModel.findByIdAndUpdate(
+            req.params.id,
+            { status: 'active', approvedAt: new Date() },
+            { new: true, select: '-password' }
+        );
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+        res.json({ message: 'User approved successfully!', user });
+    } catch (err) {
+        console.error('Approve user error:', err);
+        res.status(500).json({ error: 'Failed to approve user.' });
+    }
+});
+
+// POST /api/admin/users/:id/toggle-status (Enable / Disable account)
+app.post('/api/admin/users/:id/toggle-status', async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+
+    try {
+        const user = await UserModel.findById(req.params.id);
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        const newStatus = user.status === 'active' ? 'disabled' : 'active';
+        user.status = newStatus;
+        await user.save();
+
+        // If disabled, kill active WhatsApp bot session immediately
+        if (newStatus === 'disabled' && activeSessions.has(user._id.toString())) {
+            await stopBot(user._id.toString());
+        }
+
+        res.json({ message: `Account has been ${newStatus}.`, status: newStatus });
+    } catch (err) {
+        console.error('Toggle status error:', err);
+        res.status(500).json({ error: 'Failed to toggle status.' });
     }
 });
 
@@ -295,10 +436,13 @@ app.post('/api/sessions/start', async (req, res) => {
     const { sessionId, phoneNumber } = req.body;
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required.' });
 
-    // Validate that user exists
+    // Validate that user exists and is active
     try {
         const user = await UserModel.findById(sessionId);
         if (!user) return res.status(403).json({ error: 'Invalid session ID.' });
+        if (user.status !== 'active') {
+            return res.status(403).json({ error: 'Account is not active or is pending approval.' });
+        }
     } catch (err) {
         return res.status(400).json({ error: 'Invalid session ID format.' });
     }

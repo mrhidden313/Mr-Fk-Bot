@@ -41,13 +41,13 @@
     <div class="brand">
         <div class="icon">📱</div>
         <h1>Client Portal</h1>
-        <p>Login with the credentials provided by your Administrator.</p>
+        <p>Login to manage your WhatsApp bot and settings.</p>
     </div>
 
     {#if error}
         <div class="alert">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            {error}
+            <span>{error}</span>
         </div>
     {/if}
 
@@ -64,6 +64,11 @@
             {#if loading}<span class="spin"></span> Connecting...{:else}Login to Console{/if}
         </button>
     </form>
+
+    <div class="footer-links">
+        <span>Don't have an account?</span>
+        <a href="/signup" class="link">Sign up</a>
+    </div>
 </div>
 
 <style>
@@ -103,4 +108,8 @@
 
     .spin { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer-links { margin-top: 1.5rem; text-align: center; font-size: 0.875rem; color: #94a3b8; display: flex; justify-content: center; gap: 0.4rem; position: relative; z-index: 1; }
+    .link { color: #14b8a6; text-decoration: none; font-weight: 600; transition: color 0.2s; }
+    .link:hover { color: #2dd4bf; text-decoration: underline; }
 </style>
