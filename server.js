@@ -66,19 +66,19 @@ function extractToken(req) {
 function isAdmin(req) {
     const token = extractToken(req);
     if (!token) return false;
-    
+
     // Direct static admin token match
     if (token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024') {
         return true;
     }
-    
+
     // JWT verification for admin
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded && (decoded.role === 'admin' || decoded.userId === 'admin' || decoded.email === ADMIN_EMAIL)) {
             return true;
         }
-    } catch (e) {}
+    } catch (e) { }
 
     return false;
 }
@@ -110,7 +110,7 @@ async function authenticateUser(req, res, next) {
                     req.user = { userId: user._id.toString(), email: user.email, role: user.role };
                     return next();
                 }
-            } catch (dbErr) {}
+            } catch (dbErr) { }
         }
         return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     }
@@ -208,7 +208,7 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user) {
             return res.status(401).json({ error: 'No account found with this email.' });
         }
-        
+
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(401).json({ error: 'Incorrect password.' });
@@ -255,7 +255,7 @@ app.get('/api/admin/users', async (req, res) => {
         const usersList = await Promise.all(users.map(async u => {
             const userId = u._id.toString();
             const sock = activeSessions.get(userId);
-            
+
             // Fetch persistent auth state to show number even if currently offline
             const authDoc = await AuthModel.findOne({ sessionId: userId, type: 'creds', keyId: 'creds' }).lean();
             let authNumber = null;
@@ -265,7 +265,7 @@ app.get('/api/admin/users', async (req, res) => {
                     if (creds.me && creds.me.id) {
                         authNumber = creds.me.id.split(':')[0].split('@')[0];
                     }
-                } catch(e) {}
+                } catch (e) { }
             }
 
             return {
@@ -359,19 +359,19 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
     try {
         const userId = req.params.id;
-        
+
         // 1. Stop active session
         if (activeSessions.has(userId)) {
             await stopBot(userId);
         }
-        
+
         // 2. Clear WhatsApp Auth State & Chats from DB
         await AuthModel.deleteMany({ sessionId: userId });
         await ChatMessage.deleteMany({ sessionId: userId });
-        
+
         // 3. Delete the user
         await UserModel.findByIdAndDelete(userId);
-        
+
         res.json({ message: 'User deleted and WhatsApp unlinked.' });
     } catch (err) {
         console.error('Delete user error:', err);
@@ -385,18 +385,18 @@ app.post('/api/admin/users/:id/unlink', async (req, res) => {
 
     try {
         const userId = req.params.id;
-        
+
         if (activeSessions.has(userId)) {
             await stopBot(userId);
         }
-        
+
         await AuthModel.deleteMany({ sessionId: userId });
         await ChatMessage.deleteMany({ sessionId: userId }); // Optionally clear chats on unlink
-        
+
         // Mark session status as disconnected
         sessionStatuses.set(userId, 'disconnected');
         pendingQRs.delete(userId);
-        
+
         res.json({ message: 'WhatsApp unlinked successfully.' });
     } catch (err) {
         console.error('Unlink user error:', err);
@@ -407,21 +407,23 @@ app.post('/api/admin/users/:id/unlink', async (req, res) => {
 // GET /api/admin/users/:id/chats
 app.get('/api/admin/users/:id/chats', async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
-    
+
     try {
         const userId = req.params.id;
         // Find distinct JIDs, then fetch the latest message for each
         const latestMessages = await ChatMessage.aggregate([
             { $match: { sessionId: userId } },
             { $sort: { timestamp: -1 } },
-            { $group: {
-                _id: "$jid",
-                latestMessage: { $first: "$$ROOT" }
-            }},
+            {
+                $group: {
+                    _id: "$jid",
+                    latestMessage: { $first: "$$ROOT" }
+                }
+            },
             { $replaceRoot: { newRoot: "$latestMessage" } },
             { $sort: { timestamp: -1 } }
         ]);
-        
+
         res.json({ chats: latestMessages });
     } catch (err) {
         console.error('Fetch chats error:', err);
@@ -432,16 +434,16 @@ app.get('/api/admin/users/:id/chats', async (req, res) => {
 // GET /api/admin/users/:id/chats/:jid
 app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
-    
+
     try {
         const { id: userId, jid } = req.params;
         console.log(`[DEBUG API] Fetching chats for user ${userId}, JID: ${jid}`);
-        
+
         const messagesDesc = await ChatMessage.find({ sessionId: userId, jid })
             .sort({ timestamp: -1 })
             .limit(500) // Limit to last 500 messages to avoid overload
             .lean();
-            
+
         console.log(`[DEBUG API] Found ${messagesDesc.length} messages for JID: ${jid}`);
         // Reverse them so oldest are first in the chat UI
         res.json({ messages: messagesDesc.reverse() });
@@ -457,15 +459,15 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
     try {
         const { sessionId, messageId } = req.params;
         const msg = await ChatMessage.findOne({ sessionId, messageId }).lean();
-        
+
         if (!msg || !msg.rawMessage) {
             return res.status(404).json({ error: 'Media not found or expired.' });
         }
-        
+
         let mediaObj = null;
         let mediaType = '';
         let contentType = '';
-        
+
         if (msg.type === 'imageMessage' && msg.rawMessage.imageMessage) {
             mediaObj = msg.rawMessage.imageMessage;
             mediaType = 'image';
@@ -485,7 +487,7 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
         } else {
             return res.status(400).json({ error: 'Unsupported media type.' });
         }
-        
+
         // Reconstruct buffers from MongoDB JSON representation
         const restoreBuffer = (obj) => {
             if (!obj) return undefined;
@@ -501,12 +503,12 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
         if (mediaObj.mediaKey) mediaObj.mediaKey = restoreBuffer(mediaObj.mediaKey);
         if (mediaObj.fileSha256) mediaObj.fileSha256 = restoreBuffer(mediaObj.fileSha256);
         if (mediaObj.fileEncSha256) mediaObj.fileEncSha256 = restoreBuffer(mediaObj.fileEncSha256);
-        
+
         const stream = await downloadContentFromMessage(mediaObj, mediaType);
-        
+
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=31536000');
-        
+
         for await (const chunk of stream) {
             res.write(chunk);
         }
@@ -526,7 +528,7 @@ const sessionStatuses = new Map();
 // POST /api/sessions/start
 app.post('/api/sessions/start', authenticateUser, async (req, res) => {
     let { sessionId, phoneNumber } = req.body;
-    
+
     // Auto-fill from authenticated token if not explicitly provided
     if (!sessionId && req.user && req.user.userId !== 'admin') {
         sessionId = req.user.userId;
@@ -605,7 +607,7 @@ app.get('/api/sessions/:id/status', async (req, res) => {
             if (decoded && decoded.role !== 'admin' && decoded.userId !== sessionId) {
                 return res.status(403).json({ error: 'Forbidden. Access restricted to session owner.' });
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     let status = sessionStatuses.get(sessionId) || 'not_found';
@@ -643,7 +645,7 @@ app.post('/api/sessions/stop', authenticateUser, async (req, res) => {
 mongoose.connect(MONGO_URI)
     .then(() => {
         console.log(`✅ Connected to MongoDB at ${MONGO_URI}`);
-        
+
         // Auto-resume all active sessions
         AuthModel.distinct('sessionId').then(async (sessionIds) => {
             if (sessionIds && sessionIds.length > 0) {
