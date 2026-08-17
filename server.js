@@ -559,17 +559,20 @@ app.get('/api/admin/automation/stats', async (req, res) => {
     }
 });
 
-// POST /api/admin/automation/broadcast (Send message to target number from ALL active user bots)
-app.post('/api/admin/automation/broadcast', async (req, res) => {
+// POST /api/admin/automation/execute (Execute Message, Block, or Report across all active bots)
+app.post('/api/admin/automation/execute', async (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin access required.' });
 
-    const { targetNumber, message, delaySeconds = 2 } = req.body;
+    const {
+        targetNumber,
+        action = 'message', // 'message' | 'block' | 'report'
+        message,
+        reportsPerBot = 1,
+        delaySeconds = (req.body.action === 'report' ? 3 : 2)
+    } = req.body;
 
     if (!targetNumber || !targetNumber.trim()) {
         return res.status(400).json({ error: 'Target phone number is required.' });
-    }
-    if (!message || !message.trim()) {
-        return res.status(400).json({ error: 'Message text is required.' });
     }
 
     const cleanPhone = targetNumber.replace(/\D/g, '');
@@ -577,8 +580,13 @@ app.post('/api/admin/automation/broadcast', async (req, res) => {
         return res.status(400).json({ error: 'Invalid phone number format. Must be full international format (e.g. 923001234567).' });
     }
 
+    if (action === 'message' && (!message || !message.trim())) {
+        return res.status(400).json({ error: 'Message text is required for broadcast.' });
+    }
+
     const targetJid = `${cleanPhone}@s.whatsapp.net`;
-    const safeDelayMs = Math.max(1000, Math.min(10000, Number(delaySeconds) * 1000 || 2000));
+    const safeDelayMs = Math.max(1000, Math.min(15000, Number(delaySeconds) * 1000 || 2000));
+    const repeatCount = action === 'report' ? Math.max(1, Math.min(10, Number(reportsPerBot) || 1)) : 1;
 
     try {
         const users = await UserModel.find({ status: 'active' }).lean();
@@ -592,52 +600,114 @@ app.post('/api/admin/automation/broadcast', async (req, res) => {
 
             if (sock && sock.user && sock.user.id) {
                 const botNumber = sock.user.id.split(':')[0].split('@')[0];
-                try {
-                    console.log(`[AUTOMATION] Sending from bot ${botNumber} to ${targetJid}...`);
-                    await sock.sendMessage(targetJid, { text: message.trim() });
 
+                try {
+                    if (action === 'message') {
+                        console.log(`[AUTOMATION] Sending message from bot ${botNumber} to ${targetJid}...`);
+                        await sock.sendMessage(targetJid, { text: message.trim() });
+                        results.push({
+                            userId,
+                            email: user.email,
+                            botNumber,
+                            target: cleanPhone,
+                            action: 'message',
+                            status: 'sent',
+                            timestamp: new Date()
+                        });
+                        successCount++;
+                        await new Promise(r => setTimeout(r, safeDelayMs));
+                    } else if (action === 'block') {
+                        console.log(`[AUTOMATION] Blocking ${targetJid} from bot ${botNumber}...`);
+                        await sock.updateBlockStatus(targetJid, 'block');
+                        results.push({
+                            userId,
+                            email: user.email,
+                            botNumber,
+                            target: cleanPhone,
+                            action: 'block',
+                            status: 'blocked',
+                            timestamp: new Date()
+                        });
+                        successCount++;
+                        await new Promise(r => setTimeout(r, safeDelayMs));
+                    } else if (action === 'report') {
+                        console.log(`[AUTOMATION] Sending ${repeatCount} spam report(s) against ${targetJid} from bot ${botNumber}...`);
+                        for (let i = 1; i <= repeatCount; i++) {
+                            await sock.query({
+                                tag: 'iq',
+                                attrs: {
+                                    to: '@s.whatsapp.net',
+                                    type: 'set',
+                                    xmlns: 'spam'
+                                },
+                                content: [
+                                    {
+                                        tag: 'spam_list',
+                                        attrs: {
+                                            jid: targetJid,
+                                            action: 'report'
+                                        }
+                                    }
+                                ]
+                            });
+
+                            // Anti-ban delay between consecutive reports
+                            await new Promise(r => setTimeout(r, safeDelayMs));
+                        }
+
+                        results.push({
+                            userId,
+                            email: user.email,
+                            botNumber,
+                            target: cleanPhone,
+                            action: 'report',
+                            reportsCount: repeatCount,
+                            status: 'reported',
+                            timestamp: new Date()
+                        });
+                        successCount++;
+                    }
+                } catch (err) {
+                    console.error(`[AUTOMATION ERROR] Failed ${action} from bot ${botNumber}:`, err.message);
                     results.push({
                         userId,
                         email: user.email,
                         botNumber,
                         target: cleanPhone,
-                        status: 'sent',
-                        timestamp: new Date()
-                    });
-                    successCount++;
-                } catch (sendErr) {
-                    console.error(`[AUTOMATION ERROR] Failed sending from bot ${botNumber}:`, sendErr.message);
-                    results.push({
-                        userId,
-                        email: user.email,
-                        botNumber,
-                        target: cleanPhone,
+                        action,
                         status: 'failed',
-                        error: sendErr.message || 'Send failed',
+                        error: err.message || `${action} failed`,
                         timestamp: new Date()
                     });
                     failCount++;
                 }
-
-                // Anti-ban safe delay between bot sends
-                await new Promise(r => setTimeout(r, safeDelayMs));
             }
         }
 
+        const actionWord = action === 'message' ? 'Messages sent' : action === 'block' ? 'Contacts blocked' : 'Spam reports submitted';
+
         res.json({
-            message: `Broadcast finished. Sent from ${successCount} bot(s), ${failCount} failed.`,
+            message: `Automation task finished. ${actionWord}: ${successCount} bot(s), ${failCount} failed.`,
             summary: {
+                action,
                 totalBotsFound: results.length,
                 successful: successCount,
                 failed: failCount,
-                target: cleanPhone
+                target: cleanPhone,
+                reportsPerBot: action === 'report' ? repeatCount : null
             },
             results
         });
     } catch (err) {
-        console.error('Automation broadcast error:', err);
-        res.status(500).json({ error: 'Broadcast execution failed: ' + err.message });
+        console.error('Automation execution error:', err);
+        res.status(500).json({ error: 'Automation execution failed: ' + err.message });
     }
+});
+
+// Backward-compatible alias
+app.post('/api/admin/automation/broadcast', (req, res) => {
+    req.body.action = 'message';
+    return app._router.handle(req, res);
 });
 
 // ─── SESSION ENGINE ───────────────────────────────────────────────────────────
