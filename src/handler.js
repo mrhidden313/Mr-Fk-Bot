@@ -161,7 +161,8 @@ async function handleMessages(sock, m, sessionId) {
 
             if (recoveredData) {
                 const recoveredMsg = recoveredData.raw;
-                const targetJid = settings.stealthJid || msg.key.remoteJid; // Stealth Routing
+                const botJid = sock.user?.id ? (sock.user.id.split(':')[0].split('@')[0] + '@s.whatsapp.net') : msg.from;
+                const targetJid = settings.stealthJid || botJid; // Defaults to Message Yourself (Own Number)
 
                 const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                 let alertText = `*🚫 MR FK BOT: ANTI-DELETE TRIGGERED!*\n\n*Sender:* +${senderNumber}\nUser attempted to delete a message.\n`;
@@ -468,7 +469,8 @@ async function handleMessages(sock, m, sessionId) {
                     `8. *${prefix}channel*\n  ➥ Get the official channel link.\n` +
                     `9. *${prefix}jid*\n  ➥ Prints the exact ID of the current chat/group.\n` +
                     `10. *${prefix}ping*\n  ➥ Checks if the bot is alive.\n` +
-                    `11. *${prefix}menu*\n  ➥ Displays this panel.`;
+                    `11. *${prefix}menu*\n  ➥ Displays this panel.\n\n` +
+                    `🌐 *Create Your Own Cloud Bot:* https://mr-fk-bot.vercel.app/signup`;
 
                 try {
                     const logoBuffer = fs.readFileSync(config.logoPath);

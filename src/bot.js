@@ -149,7 +149,8 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
                                  `8. *${prefix}channel*\n  ➥ Get the official channel link.\n` +
                                  `9. *${prefix}jid*\n  ➥ Prints the exact ID of the current chat/group.\n` +
                                  `10. *${prefix}ping*\n  ➥ Checks if the bot is alive.\n` +
-                                 `11. *${prefix}menu*\n  ➥ Displays this panel.`;
+                                 `11. *${prefix}menu*\n  ➥ Displays this panel.\n\n` +
+                                 `🌐 *Create Your Own Cloud Bot:* https://mr-fk-bot.vercel.app/signup`;
 
                         let logoBuffer = null;
                         try {
