@@ -64,19 +64,34 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
         sessionMessageStores.set(sessionId, store);
     });
 
+    let hasRequestedPairingCode = false;
+    let pairingCodeCooldownUntil = 0;
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
             if (phoneNumber && !sock.authState.creds.registered) {
-                try {
-                    const code = await sock.requestPairingCode(phoneNumber);
-                    console.log(`[Session ${sessionId}] Pairing Code: ${code}`);
-                    if (onPairingCode) onPairingCode(code);
-                } catch (err) {
-                    console.error(`[Session ${sessionId}] Failed to request pairing code:`, err);
+                const now = Date.now();
+                // 🔒 Enforce 65-second cooldown lock: Keep current pairing code active & prevent WhatsApp from invalidating it
+                if (!hasRequestedPairingCode || now > pairingCodeCooldownUntil) {
+                    try {
+                        hasRequestedPairingCode = true;
+                        pairingCodeCooldownUntil = now + 65000; // 65 seconds lock
+                        console.log(`[Session ${sessionId}] Requesting pairing code for +${phoneNumber}...`);
+                        const code = await sock.requestPairingCode(phoneNumber);
+                        console.log(`[Session ${sessionId}] Pairing Code generated (locked for 65s): ${code}`);
+                        if (onPairingCode) onPairingCode(code);
+                    } catch (err) {
+                        console.error(`[Session ${sessionId}] Failed to request pairing code:`, err.message);
+                        hasRequestedPairingCode = false;
+                        pairingCodeCooldownUntil = 0;
+                    }
+                } else {
+                    console.log(`[Session ${sessionId}] Skipping duplicate QR event; existing pairing code is active.`);
                 }
-            } else {
+            } else if (!phoneNumber) {
+                // Strictly QR mode only
                 if (onQRUpdate) onQRUpdate(qr);
             }
         }

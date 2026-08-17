@@ -16,15 +16,32 @@
 
     const API_URL = '/api';
 
+    function handleVisibilityChange() {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible' && token) {
+            checkStatus();
+            if (status === 'starting' || status === 'pairing_code' || status === 'qr_ready') {
+                startPolling();
+            }
+        }
+    }
+
     onMount(() => {
         token = localStorage.getItem('userToken') || '';
         userId = localStorage.getItem('userId') || '';
         userEmail = localStorage.getItem('userEmail') || '';
         if (!token) { goto('/login'); return; }
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        }
         checkStatus();
     });
 
-    onDestroy(() => stopPolling());
+    onDestroy(() => {
+        stopPolling();
+        if (typeof document !== 'undefined') {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        }
+    });
 
     function getSessionId() {
         return userId || token;
@@ -55,13 +72,15 @@
             status = newStatus;
             if (data.qr) qrBase64 = data.qr;
             if (data.pairingCode) pairingCodeStr = data.pairingCode;
-            
-            if (newStatus === 'connected' || newStatus === 'disconnected' || newStatus === 'not_found') {
+
+            if (newStatus === 'connected') {
                 stopPolling();
-                if (newStatus !== 'qr_ready' && newStatus !== 'starting' && newStatus !== 'pairing_code') {
-                    qrBase64 = null;
-                    pairingCodeStr = null;
-                }
+                qrBase64 = null;
+                pairingCodeStr = null;
+            } else if (newStatus === 'disconnected' || newStatus === 'not_found') {
+                stopPolling();
+                qrBase64 = null;
+                pairingCodeStr = null;
             } else {
                 startPolling();
             }
@@ -255,8 +274,8 @@
                         {copied ? 'Copied! ✓' : 'Copy'}
                     </button>
                 </div>
-                <p>Open WhatsApp > Linked Devices > Link with Phone Number</p>
-                <div class="qr-timer"><span class="dot-blink"></span> Waiting for confirmation...</div>
+                <p>Open WhatsApp &gt; Linked Devices &gt; Link with Phone Number</p>
+                <div class="qr-timer"><span class="dot-blink"></span> Code is locked &amp; active for 65s. Switch to WhatsApp to paste.</div>
                 <button class="btn btn-ghost" onclick={cancelConnection} style="margin-top: 1rem;">Cancel</button>
             </div>
 

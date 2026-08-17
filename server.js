@@ -747,9 +747,12 @@ app.post('/api/sessions/start', authenticateUser, async (req, res) => {
         return res.status(400).json({ error: 'Session is already active.' });
     }
 
-    // Force a fresh auth state if they are explicitly requesting a pairing code
+    // Force a fresh auth state and clear previous caches
     if (phoneNumber) {
+        pendingQRs.delete(sessionId);
         await AuthModel.deleteMany({ sessionId }).catch(e => console.error('Failed to reset auth:', e));
+    } else {
+        pendingPairingCodes.delete(sessionId);
     }
 
     sessionStatuses.set(sessionId, 'starting');
