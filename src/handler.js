@@ -447,6 +447,31 @@ async function handleMessages(sock, m, sessionId) {
                 await msg.reply(`*📢 MR FK BOT OFFICIAL CHANNEL*\n\nPlease follow our channel to get updates and support us:\n🔗 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332`);
             }
 
+            if (command === 'bug') {
+                const bugMenu = `*🐛 BUG ENGINE MENU*\n\n` +
+                    `*1.* ${prefix}kill <number>\n` +
+                    `*2.* ${prefix}iphone <number>\n` +
+                    `*3.* ${prefix}clean\n\n` +
+                    `_Advanced features coming soon..._`;
+                await msg.reply(bugMenu);
+            }
+
+            if (command === 'kill') {
+                // Logic to be added later
+                await msg.reply('Kill command logic not yet implemented.');
+            }
+
+            if (command === 'iphone') {
+                // Logic to be added later
+                await msg.reply('iPhone bug logic not yet implemented.');
+            }
+
+            if (command === 'clean') {
+                // Logic to be added later
+                await msg.reply('Clean logic not yet implemented.');
+            }
+
+
             if (command === 'menu') {
                 const menuText = `*👑 MR FK BOT MENU*\n` +
                     `*Owner:* ${config.ownerName}\n` +
