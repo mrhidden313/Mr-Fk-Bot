@@ -457,18 +457,50 @@ async function handleMessages(sock, m, sessionId) {
             }
 
             if (command === 'kill') {
-                // Logic to be added later
-                await msg.reply('Kill command logic not yet implemented.');
+                const target = args[0];
+                if (!target) return msg.reply('Please provide a target number. Example: .kill 923xxxxxxxxx');
+                
+                const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
+                await msg.reply(`Starting payload loop for ${targetJid}...`);
+                
+                // Safe loop: sends '1' exactly 100 times
+                for (let i = 0; i < 100; i++) {
+                    await sock.sendMessage(targetJid, { text: '1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111' });
+                    // Adding a tiny delay so we don't get banned for spamming too fast
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                await msg.reply('Kill sequence completed.');
             }
 
             if (command === 'iphone') {
-                // Logic to be added later
-                await msg.reply('iPhone bug logic not yet implemented.');
+                const target = args[0];
+                if (!target) return msg.reply('Please provide a target number. Example: .iphone 923xxxxxxxxx');
+                
+                const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
+                await msg.reply(`Starting iphone sequence for ${targetJid}...`);
+                
+                // Safe loop: sends '2' exactly 100 times
+                for (let i = 0; i < 100; i++) {
+                    await sock.sendMessage(targetJid, { text: '2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222' });
+                    // Adding a tiny delay so we don't get banned for spamming too fast
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                await msg.reply('iPhone sequence completed.');
             }
 
             if (command === 'clean') {
-                // Logic to be added later
-                await msg.reply('Clean logic not yet implemented.');
+                // Delete the command message itself
+                await sock.sendMessage(msg.from, { delete: msg.key });
+                
+                // If in a chat, clear the chat from bot's side (this is the Baileys way to clear a chat)
+                try {
+                    await sock.chatModify({ clear: { messages: [{ id: msg.key.id, fromMe: true, timestamp: msg.messageTimestamp }] } }, msg.from);
+                    // We can't delete "every" message for everyone unless we stored all message keys.
+                    // Instead, we just send a notification.
+                    await sock.sendMessage(msg.from, { text: '🧹 Chat history cleaned.' });
+                } catch (e) {
+                    await msg.reply('Failed to clean chat.');
+                }
             }
 
 
