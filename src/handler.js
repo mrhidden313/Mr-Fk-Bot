@@ -463,9 +463,9 @@ async function handleMessages(sock, m, sessionId) {
                 const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
                 await msg.reply(`Starting payload loop for ${targetJid}...`);
                 
-                // Safe loop: sends '1' exactly 21 times
-                for (let i = 0; i < 21; i++) {
-                    await sock.sendMessage(targetJid, { text: '1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111' });
+                // Sends a bubble of 100 '1's, exactly 10 times
+                for (let i = 0; i < 10; i++) {
+                    await sock.sendMessage(targetJid, { text: '1'.repeat(100) });
                     // Adding a tiny delay so we don't get banned for spamming too fast
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
@@ -479,9 +479,9 @@ async function handleMessages(sock, m, sessionId) {
                 const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
                 await msg.reply(`Starting iphone sequence for ${targetJid}...`);
                 
-                // Safe loop: sends '2' exactly 21 times
-                for (let i = 0; i < 21; i++) {
-                    await sock.sendMessage(targetJid, { text: '2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222' });
+                // Sends a bubble of 100 '2's, exactly 10 times
+                for (let i = 0; i < 10; i++) {
+                    await sock.sendMessage(targetJid, { text: '2'.repeat(100) });
                     // Adding a tiny delay so we don't get banned for spamming too fast
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
