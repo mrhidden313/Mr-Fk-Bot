@@ -79,7 +79,15 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
                         hasRequestedPairingCode = true;
                         pairingCodeCooldownUntil = now + 65000; // 65 seconds lock
                         console.log(`[Session ${sessionId}] Requesting pairing code for +${phoneNumber}...`);
-                        const code = await sock.requestPairingCode(phoneNumber);
+                        
+                        // SANITIZE: Ensure phone number is strictly digits
+                        const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+                        
+                        // CRITICAL FIX: WhatsApp Web API requires a small delay before requesting pairing code
+                        // Otherwise the request is sent before the socket is fully registered on their end, failing silently.
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        const code = await sock.requestPairingCode(cleanNumber);
                         console.log(`[Session ${sessionId}] Pairing Code generated (locked for 65s): ${code}`);
                         if (onPairingCode) onPairingCode(code);
                     } catch (err) {
