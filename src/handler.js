@@ -8,6 +8,8 @@ const Contact = require('./models/Contact'); // Import Contact model
 
 // Isolated per-session Cache for Anti-Delete (Guarantees zero cross-tenant message leak)
 const sessionCaches = new Map();
+// Stores keys of sent spam messages so .clean can delete them for everyone
+const sentSpamMap = new Map();
 
 function getSessionCache(sessionId) {
     const sid = sessionId || '__default__';
@@ -463,9 +465,14 @@ async function handleMessages(sock, m, sessionId) {
                 const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
                 await msg.reply(`Starting payload loop for ${targetJid}...`);
                 
+                if (!sentSpamMap.has(targetJid)) sentSpamMap.set(targetJid, []);
+                
                 // Sends a bubble of 100 '1's, exactly 10 times
                 for (let i = 0; i < 10; i++) {
-                    await sock.sendMessage(targetJid, { text: '1'.repeat(100) });
+                    const sentMsg = await sock.sendMessage(targetJid, { text: '1'.repeat(100) });
+                    if (sentMsg && sentMsg.key) {
+                        sentSpamMap.get(targetJid).push(sentMsg.key);
+                    }
                     // Adding a tiny delay so we don't get banned for spamming too fast
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
@@ -479,9 +486,14 @@ async function handleMessages(sock, m, sessionId) {
                 const targetJid = target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`;
                 await msg.reply(`Starting iphone sequence for ${targetJid}...`);
                 
+                if (!sentSpamMap.has(targetJid)) sentSpamMap.set(targetJid, []);
+                
                 // Sends a bubble of 100 '2's, exactly 10 times
                 for (let i = 0; i < 10; i++) {
-                    await sock.sendMessage(targetJid, { text: '2'.repeat(100) });
+                    const sentMsg = await sock.sendMessage(targetJid, { text: '2'.repeat(100) });
+                    if (sentMsg && sentMsg.key) {
+                        sentSpamMap.get(targetJid).push(sentMsg.key);
+                    }
                     // Adding a tiny delay so we don't get banned for spamming too fast
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
@@ -489,18 +501,33 @@ async function handleMessages(sock, m, sessionId) {
             }
 
             if (command === 'clean') {
-                // Delete the command message itself
-                await sock.sendMessage(msg.from, { delete: msg.key });
+                const target = args[0];
+                // If a number is provided, clean that chat. Otherwise, clean the current chat.
+                const targetJid = target ? (target.includes('@s.whatsapp.net') ? target : `${target}@s.whatsapp.net`) : msg.from;
                 
-                // If in a chat, clear the chat from bot's side (this is the Baileys way to clear a chat)
-                try {
-                    await sock.chatModify({ clear: { messages: [{ id: msg.key.id, fromMe: true, timestamp: msg.messageTimestamp }] } }, msg.from);
-                    // We can't delete "every" message for everyone unless we stored all message keys.
-                    // Instead, we just send a notification.
-                    await sock.sendMessage(msg.from, { text: '🧹 Chat history cleaned.' });
-                } catch (e) {
-                    await msg.reply('Failed to clean chat.');
+                let count = 0;
+                if (sentSpamMap.has(targetJid)) {
+                    await msg.reply(`Cleaning spam messages for ${targetJid}...`);
+                    const keys = sentSpamMap.get(targetJid);
+                    
+                    for (const key of keys) {
+                        try {
+                            // Send delete protocol message for each sent spam message
+                            await sock.sendMessage(targetJid, { delete: key });
+                            count++;
+                            // Small delay to prevent rate limiting while deleting
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        } catch (e) {
+                            console.error('Failed to delete spam message:', e);
+                        }
+                    }
+                    // Clear the list after deleting
+                    sentSpamMap.delete(targetJid);
+                } else {
+                    return msg.reply(`No trackable spam messages found in memory for ${targetJid}.`);
                 }
+                
+                await msg.reply(`🧹 Successfully deleted ${count} spam messages for everyone.`);
             }
 
 
