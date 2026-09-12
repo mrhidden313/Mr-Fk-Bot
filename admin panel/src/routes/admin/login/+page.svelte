@@ -20,9 +20,13 @@
             });
             let data;
             try { data = await res.json(); } catch { data = {}; }
-            if (res.ok && data.role === 'admin') {
+            if (res.ok && (data.role === 'admin' || data.role === 'subadmin')) {
                 localStorage.setItem('adminToken', data.token);
+                localStorage.setItem('adminRole', data.role);
+                localStorage.setItem('adminEmail', data.email || email);
                 goto('/admin/dashboard');
+            } else if (res.ok && data.role === 'user') {
+                error = 'Access denied. Client users must use the Client Portal (/login).';
             } else {
                 error = data.error || 'Invalid credentials.';
             }

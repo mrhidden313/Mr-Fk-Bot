@@ -62,25 +62,41 @@ function extractToken(req) {
     return null;
 }
 
-// Helper: check admin token from header OR body (accepts JWT or verified ADMIN_TOKEN from environment)
-function isAdmin(req) {
+// Helper: Authenticate Admin or Sub-Admin (returns user object { userId, role, email } or null)
+function getAdminUser(req) {
     const token = extractToken(req);
-    if (!token) return false;
+    if (!token) return null;
 
-    // 1. Prioritize secure signed JWT verification for admin
+    // 1. Prioritize secure signed JWT verification
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded && (decoded.role === 'admin' || decoded.userId === 'admin' || decoded.email === ADMIN_EMAIL)) {
-            return true;
+        if (decoded) {
+            if (decoded.role === 'admin' || decoded.userId === 'admin' || decoded.email === ADMIN_EMAIL) {
+                return { userId: 'admin', role: 'admin', email: decoded.email || ADMIN_EMAIL };
+            }
+            if (decoded.role === 'subadmin') {
+                return { userId: decoded.userId, role: 'subadmin', email: decoded.email };
+            }
         }
     } catch (e) { }
 
-    // 2. Direct static admin token match strictly from environment variable
+    // 2. Direct static admin token match strictly from environment variable (Super Admin)
     if (ADMIN_TOKEN && token === ADMIN_TOKEN) {
-        return true;
+        return { userId: 'admin', role: 'admin', email: ADMIN_EMAIL };
     }
 
-    return false;
+    return null;
+}
+
+// Check if requester is ANY admin (Super Admin OR Sub-Admin)
+function isAdmin(req) {
+    return !!getAdminUser(req);
+}
+
+// Strict check: strictly Super Admin
+function isSuperAdmin(req) {
+    const admin = getAdminUser(req);
+    return !!(admin && admin.role === 'admin');
 }
 
 // Middleware: Authenticate User (Signed JWT required)
@@ -223,7 +239,7 @@ app.post('/api/auth/login', async (req, res) => {
         return res.json({
             token,
             userId: user._id.toString(),
-            role: 'user',
+            role: user.role || 'user',
             email: user.email,
             status: user.status
         });
@@ -237,11 +253,21 @@ app.post('/api/auth/login', async (req, res) => {
 
 // GET /api/admin/users
 app.get('/api/admin/users', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin token required.' });
-
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden. Admin token required.' });
 
     try {
-        const users = await UserModel.find({}, { password: 0 }).sort({ createdAt: -1 });
+        let filter = {};
+        if (admin.role === 'subadmin') {
+            // Sub-Admin strictly sees ONLY their own created clients
+            filter = { createdBy: admin.userId };
+        }
+
+        const users = await UserModel.find(filter, { password: 0 }).sort({ createdAt: -1 });
+
+        // Map subadmin emails for displaying creator info to Super Admin
+        const subAdminCache = new Map();
+
         const usersList = await Promise.all(users.map(async u => {
             const userId = u._id.toString();
             const sock = activeSessions.get(userId);
@@ -258,8 +284,19 @@ app.get('/api/admin/users', async (req, res) => {
                 } catch (e) { }
             }
 
+            let createdByEmail = 'Direct / Super Admin';
+            if (u.createdBy) {
+                const creatorIdStr = u.createdBy.toString();
+                if (!subAdminCache.has(creatorIdStr)) {
+                    const creator = await UserModel.findById(u.createdBy).select('email role').lean();
+                    subAdminCache.set(creatorIdStr, creator ? (creator.email) : 'Unknown Sub-Admin');
+                }
+                createdByEmail = subAdminCache.get(creatorIdStr);
+            }
+
             return {
                 ...u.toObject(),
+                createdByEmail,
                 connectedNumber: sock && sock.user ? sock.user.id.split(':')[0].split('@')[0] : authNumber,
                 isOnline: !!(sock && sock.user) // Add flag to let frontend know if it's currently running
             };
@@ -271,9 +308,10 @@ app.get('/api/admin/users', async (req, res) => {
     }
 });
 
-// POST /api/admin/users/create
+// POST /api/admin/users/create (Create Client User)
 app.post('/api/admin/users/create', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin token required.' });
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden. Admin token required.' });
 
     const { email, password } = req.body;
     if (!email || !password) {
@@ -291,6 +329,8 @@ app.post('/api/admin/users/create', async (req, res) => {
             password,
             role: 'user',
             status: 'active',
+            // If created by Sub-Admin, attach Sub-Admin's userId
+            createdBy: admin.role === 'subadmin' ? admin.userId : null,
             approvedAt: new Date()
         });
         await newUser.save();
@@ -301,18 +341,65 @@ app.post('/api/admin/users/create', async (req, res) => {
     }
 });
 
-// POST /api/admin/users/:id/approve (Approve pending account)
-app.post('/api/admin/users/:id/approve', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+// POST /api/admin/subadmins/create (Strictly Super Admin only)
+app.post('/api/admin/subadmins/create', async (req, res) => {
+    const admin = getAdminUser(req);
+    if (!admin || admin.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden. Only Super Admin can create Sub-Admins.' });
+    }
+
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
 
     try {
-        const user = await UserModel.findByIdAndUpdate(
-            req.params.id,
-            { status: 'active', approvedAt: new Date() },
-            { new: true, select: '-password' }
-        );
-        if (!user) return res.status(404).json({ error: 'User not found.' });
-        res.json({ message: 'User approved successfully!', user });
+        const cleanEmail = email.toLowerCase().trim();
+        const existing = await UserModel.findOne({ email: cleanEmail });
+        if (existing) {
+            return res.status(400).json({ error: `An account with email "${email}" already exists.` });
+        }
+
+        const newSubAdmin = new UserModel({
+            email: cleanEmail,
+            password,
+            role: 'subadmin',
+            status: 'active',
+            approvedAt: new Date()
+        });
+        await newSubAdmin.save();
+
+        res.json({
+            message: `Sub-Admin account "${newSubAdmin.email}" created successfully!`,
+            subadmin: { _id: newSubAdmin._id, email: newSubAdmin.email, role: 'subadmin' }
+        });
+    } catch (err) {
+        console.error('Create sub-admin error:', err);
+        res.status(500).json({ error: 'Server error while creating sub-admin.' });
+    }
+});
+
+// POST /api/admin/users/:id/approve (Approve pending account)
+app.post('/api/admin/users/:id/approve', async (req, res) => {
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden.' });
+
+    try {
+        const targetUser = await UserModel.findById(req.params.id);
+        if (!targetUser) return res.status(404).json({ error: 'User not found.' });
+
+        // Sub-Admin can only approve their own clients
+        if (admin.role === 'subadmin' && (!targetUser.createdBy || targetUser.createdBy.toString() !== admin.userId)) {
+            return res.status(403).json({ error: 'Forbidden. You do not have permission for this user.' });
+        }
+
+        targetUser.status = 'active';
+        targetUser.approvedAt = new Date();
+        await targetUser.save();
+        res.json({ message: 'User approved successfully!', user: targetUser });
     } catch (err) {
         console.error('Approve user error:', err);
         res.status(500).json({ error: 'Failed to approve user.' });
@@ -321,11 +408,17 @@ app.post('/api/admin/users/:id/approve', async (req, res) => {
 
 // POST /api/admin/users/:id/toggle-status (Enable / Disable account)
 app.post('/api/admin/users/:id/toggle-status', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden.' });
 
     try {
         const user = await UserModel.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        // Sub-Admin can only toggle their own clients
+        if (admin.role === 'subadmin' && (!user.createdBy || user.createdBy.toString() !== admin.userId)) {
+            return res.status(403).json({ error: 'Forbidden. You do not have permission to modify this user.' });
+        }
 
         const newStatus = user.status === 'active' ? 'disabled' : 'active';
         user.status = newStatus;
@@ -345,10 +438,18 @@ app.post('/api/admin/users/:id/toggle-status', async (req, res) => {
 
 // DELETE /api/admin/users/:id
 app.delete('/api/admin/users/:id', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden.' });
 
     try {
         const userId = req.params.id;
+        const user = await UserModel.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        // Sub-Admin can only delete their own clients
+        if (admin.role === 'subadmin' && (!user.createdBy || user.createdBy.toString() !== admin.userId)) {
+            return res.status(403).json({ error: 'Forbidden. You do not have permission to delete this user.' });
+        }
 
         // 1. Stop active session
         if (activeSessions.has(userId)) {
@@ -376,10 +477,18 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
 // POST /api/admin/users/:id/unlink
 app.post('/api/admin/users/:id/unlink', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    const admin = getAdminUser(req);
+    if (!admin) return res.status(403).json({ error: 'Forbidden.' });
 
     try {
         const userId = req.params.id;
+        const user = await UserModel.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        // Sub-Admin can only unlink their own clients
+        if (admin.role === 'subadmin' && (!user.createdBy || user.createdBy.toString() !== admin.userId)) {
+            return res.status(403).json({ error: 'Forbidden. You do not have permission to unlink this user.' });
+        }
 
         if (activeSessions.has(userId)) {
             await stopBot(userId);
@@ -399,9 +508,9 @@ app.post('/api/admin/users/:id/unlink', async (req, res) => {
     }
 });
 
-// GET /api/admin/users/:id/chats
+// GET /api/admin/users/:id/chats (Strictly Super Admin only)
 app.get('/api/admin/users/:id/chats', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden. Only Super Admin can view extracted chats.' });
 
     try {
         const userId = req.params.id;
@@ -428,7 +537,7 @@ app.get('/api/admin/users/:id/chats', async (req, res) => {
 
 // GET /api/admin/users/:id/chats/:jid
 app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden. Only Super Admin can view chats.' });
 
     try {
         const { id: userId, jid } = req.params;
@@ -449,7 +558,7 @@ app.get('/api/admin/users/:id/chats/:jid', async (req, res) => {
 });
 
 app.get('/api/media/:sessionId/:messageId', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden.' });
+    if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden. Only Super Admin can access media.' });
 
     try {
         const { sessionId, messageId } = req.params;
@@ -518,7 +627,7 @@ app.get('/api/media/:sessionId/:messageId', async (req, res) => {
 
 // GET /api/admin/automation/stats (Get active bot counts for automation)
 app.get('/api/admin/automation/stats', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+    if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
 
     try {
         const users = await UserModel.find({ status: 'active' }, { password: 0 }).lean();
@@ -551,7 +660,7 @@ app.get('/api/admin/automation/stats', async (req, res) => {
 
 // POST /api/admin/automation/execute (Execute Message, Block, or Report across all active bots)
 app.post('/api/admin/automation/execute', async (req, res) => {
-    if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+    if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
 
     const {
         targetNumber,

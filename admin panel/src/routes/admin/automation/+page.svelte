@@ -21,8 +21,13 @@
 
     onMount(async () => {
         token = localStorage.getItem('adminToken') || '';
+        const role = localStorage.getItem('adminRole') || 'admin';
         if (!token) {
             goto('/admin/login');
+            return;
+        }
+        if (role !== 'admin') {
+            goto('/admin/dashboard');
             return;
         }
         await fetchStats();

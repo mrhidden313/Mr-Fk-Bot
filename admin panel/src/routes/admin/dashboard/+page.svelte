@@ -6,6 +6,10 @@
     let pageLoading = $state(true);
     let fetchError = $state('');
     
+    // Auth & Role State
+    let currentRole = $state('admin');
+    let currentEmail = $state('');
+
     // Create User Modal State
     let showCreateModal = $state(false);
     let newEmail = $state('');
@@ -13,6 +17,14 @@
     let creating = $state(false);
     let createMessage = $state('');
     let createError = $state('');
+
+    // Create Sub-Admin Modal State (Super Admin Only)
+    let showSubAdminModal = $state(false);
+    let subAdminEmail = $state('');
+    let subAdminPassword = $state('');
+    let creatingSubAdmin = $state(false);
+    let subAdminMessage = $state('');
+    let subAdminError = $state('');
     
     let token = $state('');
     let deletingId = $state(null);
@@ -30,6 +42,8 @@
 
     onMount(async () => {
         token = localStorage.getItem('adminToken') || '';
+        currentRole = localStorage.getItem('adminRole') || 'admin';
+        currentEmail = localStorage.getItem('adminEmail') || '';
         if (!token) { goto('/admin/login'); return; }
         await fetchUsers();
     });
@@ -89,6 +103,45 @@
             createError = 'Network error.';
         } finally {
             creating = false;
+        }
+    }
+
+    async function createSubAdmin() {
+        if (!subAdminEmail.trim() || !subAdminPassword.trim()) {
+            subAdminError = 'Both fields are required.';
+            return;
+        }
+        if (subAdminPassword.trim().length < 6) {
+            subAdminError = 'Password must be at least 6 characters.';
+            return;
+        }
+        creatingSubAdmin = true;
+        subAdminMessage = '';
+        subAdminError = '';
+        try {
+            const res = await fetch(`${API_URL}/admin/subadmins/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-token': token, 'Authorization': token },
+                body: JSON.stringify({ email: subAdminEmail.trim(), password: subAdminPassword.trim() })
+            });
+            let data;
+            try { data = await res.json(); } catch { data = {}; }
+            if (res.ok) {
+                subAdminMessage = `✓ Sub-Admin "${subAdminEmail}" created successfully!`;
+                subAdminEmail = '';
+                subAdminPassword = '';
+                await fetchUsers();
+                setTimeout(() => {
+                    showSubAdminModal = false;
+                    subAdminMessage = '';
+                }, 1800);
+            } else {
+                subAdminError = data.error || `Failed (${res.status})`;
+            }
+        } catch {
+            subAdminError = 'Network error.';
+        } finally {
+            creatingSubAdmin = false;
         }
     }
 
@@ -190,6 +243,8 @@
 
     function logout() {
         localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminRole');
+        localStorage.removeItem('adminEmail');
         goto('/admin/login');
     }
 
@@ -211,14 +266,25 @@
     <!-- Header -->
     <div class="topbar">
         <div class="topbar-left">
-            <h1>MR FK Admin Dashboard</h1>
-            <p>Manage SaaS Clients, IP Approvals & Access Control</p>
+            {#if currentRole === 'admin'}
+                <h1>MR FK Admin Dashboard <span class="role-badge super">👑 Super Admin</span></h1>
+                <p>Manage SaaS Clients, Sub-Admins, IP Approvals & Access Control</p>
+            {:else}
+                <h1>MR FK Sub-Admin Portal <span class="role-badge sub">🛡️ Sub-Admin</span></h1>
+                <p>Logged in as: <strong>{currentEmail}</strong> — Manage your registered clients</p>
+            {/if}
         </div>
         <div class="topbar-right">
-            <a href="/admin/automation" class="btn-automation">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Automation
-            </a>
+            {#if currentRole === 'admin'}
+                <a href="/admin/automation" class="btn-automation">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Automation
+                </a>
+                <button class="btn-subadmin" onclick={() => { showSubAdminModal = true; subAdminMessage = ''; subAdminError = ''; }}>
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                    Create Sub-Admin
+                </button>
+            {/if}
             <button class="btn-primary" onclick={() => { showCreateModal = true; createMessage = ''; createError = ''; }}>
                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 New Client
@@ -300,9 +366,11 @@
                     Client List
                 </h2>
                 <div style="display: flex; gap: 0.75rem; align-items: center;">
-                    <a href="/admin/automation" class="btn-automation-sm">
-                        ⚡ Multi-Bot Automation
-                    </a>
+                    {#if currentRole === 'admin'}
+                        <a href="/admin/automation" class="btn-automation-sm">
+                            ⚡ Multi-Bot Automation
+                        </a>
+                    {/if}
                     <button class="btn-refresh" onclick={fetchUsers} disabled={pageLoading}>
                         {pageLoading ? '...' : '↻ Refresh Data'}
                     </button>
@@ -330,6 +398,9 @@
                         <thead>
                             <tr>
                                 <th>Client Email</th>
+                                {#if currentRole === 'admin'}
+                                    <th>Registered By</th>
+                                {/if}
                                 <th>Account Status</th>
                                 <th>WhatsApp Status</th>
                                 <th>Registration IP</th>
@@ -341,6 +412,15 @@
                             {#each users as user}
                                 <tr onclick={() => openUserDetail(user)} class={selectedUser?._id === user._id ? 'active-row' : ''}>
                                     <td class="em" data-label="Client Email">{user.email}</td>
+                                    {#if currentRole === 'admin'}
+                                        <td data-label="Registered By">
+                                            {#if user.role === 'subadmin'}
+                                                <span class="badge blue">🛡️ Sub-Admin Account</span>
+                                            {:else}
+                                                <span class="dim mono-sm">{user.createdByEmail || 'Direct / Super Admin'}</span>
+                                            {/if}
+                                        </td>
+                                    {/if}
                                     <td data-label="Account Status">
                                         {#if user.status === 'active' || !user.status}
                                             <span class="badge green">● Active</span>
@@ -417,6 +497,45 @@
     </div>
 {/if}
 
+<!-- Create Sub-Admin Modal (Super Admin Only) -->
+{#if showSubAdminModal && currentRole === 'admin'}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-backdrop" onclick={() => showSubAdminModal = false}>
+        <div class="modal" onclick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+                <h2>🛡️ Create New Sub-Admin</h2>
+                <button class="btn-close" onclick={() => showSubAdminModal = false}>✕</button>
+            </div>
+            <div class="modal-body">
+                {#if subAdminMessage}
+                    <div class="msg msg-ok">{subAdminMessage}</div>
+                {/if}
+                {#if subAdminError}
+                    <div class="msg msg-err">⚠ {subAdminError}</div>
+                {/if}
+
+                <form onsubmit={(e) => { e.preventDefault(); createSubAdmin(); }}>
+                    <div class="field">
+                        <label for="subEmail">Sub-Admin Email Address</label>
+                        <input id="subEmail" type="email" bind:value={subAdminEmail} required disabled={creatingSubAdmin} placeholder="Enter sub-admin email (e.g. agent@domain.com)" />
+                    </div>
+                    <div class="field">
+                        <label for="subPass">Login Password (min. 6 chars)</label>
+                        <input id="subPass" type="text" bind:value={subAdminPassword} required disabled={creatingSubAdmin} placeholder="Set secure password" />
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-secondary" onclick={() => showSubAdminModal = false} disabled={creatingSubAdmin}>Cancel</button>
+                        <button type="submit" class="btn-subadmin" disabled={creatingSubAdmin}>
+                            {#if creatingSubAdmin}<span class="spin"></span> Creating...{:else}Create Sub-Admin Account{/if}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{/if}
+
 <!-- Slide-in User Detail Panel -->
 {#if selectedUser}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -477,10 +596,12 @@
                     </button>
                 {/if}
 
-                <button class="btn-action primary" onclick={() => viewChats(selectedUser._id)}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    View Chats (Read Only)
-                </button>
+                {#if currentRole === 'admin'}
+                    <button class="btn-action primary" onclick={() => viewChats(selectedUser._id)}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        View Chats (Read Only)
+                    </button>
+                {/if}
                 
                 <button class="btn-action warning" onclick={() => toggleUserStatus(selectedUser._id)} disabled={togglingId === selectedUser._id}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -515,6 +636,14 @@
 
     .btn-automation-sm { padding: 0.45rem 0.9rem; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; box-shadow: 0 4px 12px rgba(99,102,241,0.3); transition: all 0.2s; }
     .btn-automation-sm:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.45); color: white; }
+
+    .role-badge { display: inline-flex; align-items: center; font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 9999px; vertical-align: middle; margin-left: 0.5rem; letter-spacing: 0; }
+    .role-badge.super { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .role-badge.sub { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+
+    .btn-subadmin { padding: 0.6rem 1.25rem; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(2,132,199,0.25); }
+    .btn-subadmin:hover:not(:disabled) { background: linear-gradient(135deg, #0369a1, #075985); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(2,132,199,0.4); }
+    .btn-subadmin:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
     .btn-primary { padding: 0.6rem 1.25rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(16,185,129,0.2); }
     .btn-primary:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
@@ -584,6 +713,7 @@
     .yellow { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
     .red { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
     .gray { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.25); }
+    .blue { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
 
     /* Modal Styles */
     .modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.8); backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: center; justify-content: center; }

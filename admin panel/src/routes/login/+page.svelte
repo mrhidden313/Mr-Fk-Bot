@@ -25,8 +25,8 @@
                 localStorage.setItem('userEmail', data.email);
                 if (data.userId) localStorage.setItem('userId', data.userId);
                 goto('/dashboard');
-            } else if (res.ok && data.role === 'admin') {
-                error = 'Admin accounts use the Admin Portal.';
+            } else if (res.ok && (data.role === 'admin' || data.role === 'subadmin')) {
+                error = 'Admin and Sub-Admin accounts must use the Admin Portal (/admin/login).';
             } else {
                 error = data.error || 'Invalid email or password.';
             }
