@@ -212,12 +212,12 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const user = await UserModel.findOne({ email: cleanEmail });
         if (!user) {
-            return res.status(401).json({ error: 'No account found with this email.' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            return res.status(401).json({ error: 'Incorrect password.' });
+            return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
         // Check Account Status

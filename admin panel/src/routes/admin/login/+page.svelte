@@ -25,10 +25,8 @@
                 localStorage.setItem('adminRole', data.role);
                 localStorage.setItem('adminEmail', data.email || email);
                 goto('/admin/dashboard');
-            } else if (res.ok && data.role === 'user') {
-                error = 'Access denied. Client users must use the Client Portal (/login).';
             } else {
-                error = data.error || 'Invalid credentials.';
+                error = 'Invalid credentials.';
             }
         } catch {
             error = 'Network error. Cannot reach server.';
