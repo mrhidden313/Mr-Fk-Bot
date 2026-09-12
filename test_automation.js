@@ -35,6 +35,7 @@ try {
 }
 
 // 2. Multi-bot simulated dispatch with safe delay
+
 async function simulateMultiBotDispatch(bots, targetNumber, message, delayMs) {
     const targetJid = formatTargetJid(targetNumber);
     const results = [];

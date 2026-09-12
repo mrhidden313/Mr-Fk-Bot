@@ -15,7 +15,8 @@
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email, password }),
+                signal: AbortSignal.timeout(12000)
             });
             let data;
             try { data = await res.json(); } catch { data = {}; }

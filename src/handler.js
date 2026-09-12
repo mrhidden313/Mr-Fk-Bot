@@ -76,7 +76,7 @@ async function handleMessages(sock, m, sessionId) {
         // --- PREMIUM: AUTO STATUS SAVER ---
         if (msg.key.remoteJid === 'status@broadcast') {
             if (settings.autoStatus) {
-                const targetJid = settings.statusJid || config.ownerNumber + '@s.whatsapp.net';
+                const targetJid = settings.statusJid || (config.ownerNumber ? `${config.ownerNumber}@s.whatsapp.net` : null);
                 if (!targetJid) return; // Need an owner number or specific JID
 
                 try {

@@ -54,7 +54,8 @@ async function proxy(path, method, request, body) {
         const res = await fetch(url, {
             method,
             headers,
-            body: body || undefined
+            body: body || undefined,
+            signal: AbortSignal.timeout(10000)
         });
 
         return new Response(res.body, {

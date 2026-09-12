@@ -13,7 +13,7 @@ const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mrfkbot';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'mrhiddenhacker313@gmail.com').toLowerCase().trim();
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Farman1122@@@';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin_token_secure_mrfk_2024';
 const JWT_SECRET = process.env.JWT_SECRET || 'mr_fk_secure_jwt_secret_key_2026_super_safe';
 
@@ -62,17 +62,12 @@ function extractToken(req) {
     return null;
 }
 
-// Helper: check admin token from header OR body (accepts JWT, current ADMIN_TOKEN, fallback, or legacy token)
+// Helper: check admin token from header OR body (accepts JWT or verified ADMIN_TOKEN from environment)
 function isAdmin(req) {
     const token = extractToken(req);
     if (!token) return false;
 
-    // Direct static admin token match
-    if (token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024') {
-        return true;
-    }
-
-    // JWT verification for admin
+    // 1. Prioritize secure signed JWT verification for admin
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded && (decoded.role === 'admin' || decoded.userId === 'admin' || decoded.email === ADMIN_EMAIL)) {
@@ -80,38 +75,33 @@ function isAdmin(req) {
         }
     } catch (e) { }
 
+    // 2. Direct static admin token match strictly from environment variable
+    if (ADMIN_TOKEN && token === ADMIN_TOKEN) {
+        return true;
+    }
+
     return false;
 }
 
-// Middleware: Authenticate User (JWT or verified legacy fallback)
+// Middleware: Authenticate User (Signed JWT required)
 async function authenticateUser(req, res, next) {
     const token = extractToken(req);
     if (!token) {
         return res.status(401).json({ error: 'Authentication required. No token provided.' });
     }
 
-    // Check if it's admin token
-    if (token === ADMIN_TOKEN || token === 'admin_token_secure' || token === 'admin_token_secure_mrfk_2024') {
+    // Check if it's admin token strictly from environment variable
+    if (ADMIN_TOKEN && token === ADMIN_TOKEN) {
         req.user = { userId: 'admin', role: 'admin', email: ADMIN_EMAIL };
         return next();
     }
 
-    // Check JWT
+    // Verify JWT
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded;
         return next();
     } catch (jwtErr) {
-        // Fallback for legacy raw ObjectId tokens during migration
-        if (/^[0-9a-fA-F]{24}$/.test(token)) {
-            try {
-                const user = await UserModel.findById(token);
-                if (user && user.status === 'active') {
-                    req.user = { userId: user._id.toString(), email: user.email, role: user.role };
-                    return next();
-                }
-            } catch (dbErr) { }
-        }
         return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     }
 }
@@ -852,7 +842,23 @@ app.post('/api/sessions/stop', authenticateUser, async (req, res) => {
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
 
-mongoose.connect(MONGO_URI)
+mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB runtime connection error:', err.message);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB connection lost. Driver will automatically attempt reconnection.');
+});
+
+mongoose.connection.on('reconnected', () => {
+    console.log('🔄 MongoDB reconnected successfully.');
+});
+
+mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 5000,
+    maxPoolSize: 20,
+    socketTimeoutMS: 45000
+})
     .then(() => {
         console.log(`✅ Connected to MongoDB at ${MONGO_URI}`);
 
@@ -879,6 +885,7 @@ mongoose.connect(MONGO_URI)
         });
     })
     .catch(err => {
-        console.error('❌ MongoDB connection failed:', err.message);
+        console.error('❌ MongoDB connection failed on bootup:', err.message);
+        console.error('💡 TIP: Check if mongod service is running and firewall/bindIp is properly set.');
         process.exit(1);
     });
