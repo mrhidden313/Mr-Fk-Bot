@@ -151,7 +151,7 @@ async function startBot(sessionId, onQRUpdate, onStatusUpdate, onPairingCode, ph
                     try {
                         const prefix = config.prefix;
                         const menuText = `*🎉 SUCCESS! Engine Linked Successfully!*\n\n` +
-                                 `*🤖 MR FK BOT MENU*\n` +
+                                 `*🤖 Bot by Mr HIDDEN & SUDAIS H4CKR - MENU*\n` +
                                  `*Owner:* ${config.ownerName}\n` +
                                  `*Prefix:* [ ${prefix} ]\n` +
                                  `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +

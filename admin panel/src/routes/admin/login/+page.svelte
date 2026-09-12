@@ -41,9 +41,9 @@
 <div class="card">
     <div class="card-glow"></div>
     <div class="brand">
-        <div class="icon">⚡</div>
+        <img src="/logo.png" alt="Mr HIDDEN & SUDAIS H4CKR" class="login-logo-img" />
         <h1>Admin Command</h1>
-        <p>Secure access to the MR FK engine core.</p>
+        <p>Mr HIDDEN & SUDAIS H4CKR Core Engine</p>
     </div>
 
     {#if error}
@@ -86,7 +86,13 @@
         border-radius: 50%; pointer-events: none;
     }
     .brand { text-align: center; margin-bottom: 2rem; position: relative; z-index: 1; }
-    .icon { font-size: 2rem; margin-bottom: 0.625rem; display: block; }
+    .login-logo-img {
+        width: 72px; height: 72px;
+        border-radius: 16px; object-fit: cover;
+        margin: 0 auto 0.75rem; display: block;
+        border: 2px solid rgba(16,185,129,0.5);
+        box-shadow: 0 0 25px rgba(16,185,129,0.4);
+    }
     .brand h1 { font-size: 1.625rem; font-weight: 700; color: #fff; margin: 0 0 0.25rem; }
     .brand p { font-size: 0.875rem; color: #64748b; margin: 0; }
 

@@ -9,8 +9,9 @@
 </script>
 
 <svelte:head>
-    <title>MR FK Engine — WhatsApp SaaS</title>
+    <title>Mr HIDDEN & SUDAIS H4CKR — WhatsApp SaaS</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/logo.png">
 </svelte:head>
 
 <div class="shell">
@@ -21,10 +22,8 @@
         <header class="nav">
             <div class="nav-inner">
                 <div class="brand">
-                    <div class="brand-icon">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    </div>
-                    <span class="brand-name">MR FK Engine</span>
+                    <img src="/logo.png" alt="Logo" class="brand-logo-img" />
+                    <span class="brand-name">Mr HIDDEN & SUDAIS H4CKR</span>
                 </div>
             </div>
         </header>
@@ -62,14 +61,12 @@
         border-bottom: 1px solid rgba(16, 185, 129, 0.15);
     }
     .nav-inner { max-width: 1280px; margin: 0 auto; padding: 0 1.5rem; height: 60px; display: flex; align-items: center; }
-    .brand { display: flex; align-items: center; gap: 0.625rem; }
-    .brand-icon {
-        width: 32px; height: 32px;
-        background: #10b981;
+    .brand-logo-img {
+        width: 34px; height: 34px;
         border-radius: 8px;
-        display: flex; align-items: center; justify-content: center;
-        color: white;
-        box-shadow: 0 0 16px rgba(16, 185, 129, 0.5);
+        object-fit: cover;
+        border: 1px solid rgba(16, 185, 129, 0.4);
+        box-shadow: 0 0 14px rgba(16, 185, 129, 0.4);
     }
     .brand-name { font-size: 1.0625rem; font-weight: 700; color: white; letter-spacing: -0.3px; }
 

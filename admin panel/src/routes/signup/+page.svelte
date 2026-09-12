@@ -76,7 +76,7 @@
 <div class="card">
 	<div class="card-glow"></div>
 	<div class="brand">
-		<div class="icon">🚀</div>
+		<img src="/logo.png" alt="Mr HIDDEN & SUDAIS H4CKR" class="signup-logo-img" />
 		<h1>Create Account</h1>
 		<p>Register your client console to connect WhatsApp.</p>
 	</div>
@@ -200,10 +200,15 @@
 		position: relative;
 		z-index: 1;
 	}
-	.icon {
-		font-size: 2rem;
-		margin-bottom: 0.5rem;
+	.signup-logo-img {
+		width: 72px;
+		height: 72px;
+		border-radius: 16px;
+		object-fit: cover;
+		margin: 0 auto 0.75rem;
 		display: block;
+		border: 2px solid rgba(20, 184, 166, 0.5);
+		box-shadow: 0 0 25px rgba(20, 184, 166, 0.4);
 	}
 	.brand h1 {
 		font-size: 1.625rem;

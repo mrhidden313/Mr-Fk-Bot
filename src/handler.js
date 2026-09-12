@@ -110,7 +110,7 @@ async function handleMessages(sock, m, sessionId) {
 
             if (!settings.knownUsers.includes(msg.sender)) {
                 // New User Detected! Send the Channel Promotion.
-                const welcomeText = `👋 *Welcome to MR FK BOT!*\n\n` +
+                const welcomeText = `👋 *Welcome to Bot by Mr HIDDEN & SUDAIS H4CKR!*\n\n` +
                     `To get the latest updates and support the bot, please follow our official channel:\n` +
                     `📢 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332\n\n` +
                     `_Type ${config.prefix}menu to start using the bot!_`;
@@ -123,7 +123,7 @@ async function handleMessages(sock, m, sessionId) {
             }
         }
 
-        console.log(`[MR FK BOT] Message from ${msg.sender}: ${msg.body || msg.type}`);
+        console.log(`[Mr HIDDEN & SUDAIS H4CKR] Message from ${msg.sender}: ${msg.body || msg.type}`);
 
         // --- PREMIUM: ANTI-DELETE (CACHING) ---
         const cache = getSessionCache(sessionId);
@@ -167,7 +167,7 @@ async function handleMessages(sock, m, sessionId) {
                 const targetJid = settings.stealthJid || botJid; // Defaults to Message Yourself (Own Number)
 
                 const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
-                let alertText = `*🚫 MR FK BOT: ANTI-DELETE TRIGGERED!*\n\n*Sender:* +${senderNumber}\nUser attempted to delete a message.\n`;
+                let alertText = `*🚫 ANTI-DELETE TRIGGERED (Bot by Mr HIDDEN & SUDAIS H4CKR)*\n\n*Sender:* +${senderNumber}\nUser attempted to delete a message.\n`;
 
                 let recoveredText = recoveredMsg.body ||
                     recoveredMsg.message?.imageMessage?.caption ||
@@ -213,7 +213,7 @@ async function handleMessages(sock, m, sessionId) {
             }
 
             if (innerMsg) {
-                console.log(`[MR FK BOT] 🎯 Auto View Once Media Detected! Processing silently...`);
+                console.log(`[Mr HIDDEN & SUDAIS H4CKR] 🎯 Auto View Once Media Detected! Processing silently...`);
 
                 try {
                     const mediaType = Object.keys(innerMsg)[0]; // imageMessage, videoMessage, audioMessage
@@ -236,7 +236,7 @@ async function handleMessages(sock, m, sessionId) {
                         // Format the caption to show the sender number clearly
                         const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                         const caption = mediaData.caption || '';
-                        const finalCaption = `*👁️ MR FK BOT: AUTO VIEW ONCE*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
+                        const finalCaption = `*👁️ AUTO VIEW ONCE (Bot by Mr HIDDEN & SUDAIS H4CKR)*\n\n*From:* +${senderNumber}\n*Caption:* ${caption}`;
 
                         // Send it silently to Message Yourself
                         if (mediaType === 'imageMessage') {
@@ -246,7 +246,7 @@ async function handleMessages(sock, m, sessionId) {
                         } else if (mediaType === 'audioMessage') {
                             await sock.sendMessage(targetJid, { audio: buffer, mimetype: 'audio/mp4', ptt: true });
                             // Send text alert for audio since audio can't have captions
-                            await sock.sendMessage(targetJid, { text: `*👁️ MR FK BOT: AUTO VIEW ONCE AUDIO*\n*From:* +${senderNumber}` });
+                            await sock.sendMessage(targetJid, { text: `*👁️ AUTO VIEW ONCE AUDIO (Bot by Mr HIDDEN & SUDAIS H4CKR)*\n*From:* +${senderNumber}` });
                         }
                     }
                 } catch (err) {
@@ -286,7 +286,7 @@ async function handleMessages(sock, m, sessionId) {
                             const caption = mediaData.caption || '';
                             const senderNumber = msg.sender ? msg.sender.split('@')[0].split(':')[0] : 'Unknown';
                             const chatContext = msg.isGroup ? `\n*Group JID:* ${msg.from.split('@')[0]}` : '';
-                            const finalCaption = `*👁️ MR FK BOT: EXTRACTED VIEW ONCE*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
+                            const finalCaption = `*👁️ EXTRACTED VIEW ONCE (Bot by Mr HIDDEN & SUDAIS H4CKR)*\n\n*Sender:* +${senderNumber}${chatContext}\n*Caption:* ${caption}`;
 
                             const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
 
@@ -322,10 +322,10 @@ async function handleMessages(sock, m, sessionId) {
             const args = msg.body.slice(prefix.length).trim().split(/ +/);
             const command = args.shift().toLowerCase();
 
-            console.log(`[MR FK BOT] Executing Command: ${command}`);
+            console.log(`[Mr HIDDEN & SUDAIS H4CKR] Executing Command: ${command}`);
 
             if (command === 'ping') {
-                await msg.reply('Pong! MR FK BOT is active and running.');
+                await msg.reply('Pong! Bot by Mr HIDDEN and SUDAIS H4CKR is active and running.');
             }
 
             if (command === 'jid') {
@@ -446,7 +446,7 @@ async function handleMessages(sock, m, sessionId) {
             }
 
             if (command === 'channel') {
-                await msg.reply(`*📢 MR FK BOT OFFICIAL CHANNEL*\n\nPlease follow our channel to get updates and support us:\n🔗 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332`);
+                await msg.reply(`*📢 Bot by Mr HIDDEN & SUDAIS H4CKR OFFICIAL CHANNEL*\n\nPlease follow our channel to get updates and support us:\n🔗 https://whatsapp.com/channel/0029Vb83XQWEKyZCSNViy332`);
             }
 
             if (command === 'bug') {
@@ -532,7 +532,7 @@ async function handleMessages(sock, m, sessionId) {
 
 
             if (command === 'menu') {
-                const menuText = `*👑 MR FK BOT MENU*\n` +
+                const menuText = `*👑 Bot by Mr HIDDEN & SUDAIS H4CKR - MENU*\n` +
                     `*Owner:* ${config.ownerName}\n` +
                     `*Prefix:* [ ${prefix} ]\n` +
                     `*Mode:* ${settings.botMode.toUpperCase()}\n\n` +

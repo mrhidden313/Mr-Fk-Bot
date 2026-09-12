@@ -267,10 +267,10 @@
     <div class="topbar">
         <div class="topbar-left">
             {#if currentRole === 'admin'}
-                <h1>MR FK Admin Dashboard <span class="role-badge super">👑 Super Admin</span></h1>
+                <h1>Mr HIDDEN & SUDAIS H4CKR Dashboard <span class="role-badge super">👑 Super Admin</span></h1>
                 <p>Manage SaaS Clients, Sub-Admins, IP Approvals & Access Control</p>
             {:else}
-                <h1>MR FK Sub-Admin Portal <span class="role-badge sub">🛡️ Sub-Admin</span></h1>
+                <h1>Mr HIDDEN & SUDAIS H4CKR Sub-Admin Portal <span class="role-badge sub">🛡️ Sub-Admin</span></h1>
                 <p>Logged in as: <strong>{currentEmail}</strong> — Manage your registered clients</p>
             {/if}
         </div>
