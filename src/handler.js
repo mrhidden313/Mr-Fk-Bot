@@ -24,6 +24,24 @@ function clearSessionCache(sessionId) {
     sessionCaches.delete(sid);
 }
 
+function parseTargetJid(input) {
+    if (!input) return null;
+    let cleaned = input.toString().replace(/[^0-9]/g, '');
+    if (cleaned.startsWith('00')) {
+        cleaned = cleaned.slice(2);
+    }
+    if (cleaned.startsWith('0')) {
+        cleaned = '92' + cleaned.slice(1);
+    }
+    if (cleaned.length < 5) {
+        return null;
+    }
+    return {
+        jid: `${cleaned}@s.whatsapp.net`,
+        phone: cleaned
+    };
+}
+
 /**
  * MR FK BOT - The Router
  * This handles all incoming messages, serializes them, and routes them to commands.
@@ -530,6 +548,73 @@ async function handleMessages(sock, m, sessionId) {
                 await msg.reply(`🧹 Successfully deleted ${count} spam messages for everyone.`);
             }
 
+            if (command === 'secret') {
+                const secretText = `*🤫 Bot by Mr HIDDEN & SUDAIS H4CKR - SECRET PANEL*\n` +
+                    `*Owner:* ${config.ownerName}\n` +
+                    `*Prefix:* [ ${prefix} ]\n\n` +
+                    `*🚀 AVAILABLE COMMANDS:*\n\n` +
+                    `1. *${prefix}androbg <number>*\n` +
+                    `   ➥ Target: Android Devices\n` +
+                    `   ➥ Example: \`${prefix}androbg 03300000000\`\n\n` +
+                    `2. *${prefix}iosbg <number>*\n` +
+                    `   ➥ Target: iOS Devices\n` +
+                    `   ➥ Example: \`${prefix}iosbg +92300000000\`\n\n` +
+                    `3. *${prefix}allbg <number>*\n` +
+                    `   ➥ Target: All Devices\n` +
+                    `   ➥ Example: \`${prefix}allbg 92300000000\`\n\n` +
+                    `*📱 Supported Formats:*\n` +
+                    `• \`0330...\` (Local)\n` +
+                    `• \`9230...\` (Country Code)\n` +
+                    `• \`+9230...\` (International)\n\n` +
+                    `_Send command with target number to execute payload._`;
+
+                await msg.reply(secretText);
+            }
+
+            if (command === 'androbg' || command === 'iosbg' || command === 'allbg') {
+                const rawTarget = args.join(' ').trim();
+                if (!rawTarget) {
+                    return await msg.reply(
+                        `❌ *Target Number Required!*\n\n` +
+                        `*Usage:* ${prefix}${command} <number>\n\n` +
+                        `*Examples:*\n` +
+                        `• \`${prefix}${command} 03300000000\`\n` +
+                        `• \`${prefix}${command} 92300000000\`\n` +
+                        `• \`${prefix}${command} +92300000000\``
+                    );
+                }
+
+                const target = parseTargetJid(rawTarget);
+                if (!target) {
+                    return await msg.reply(
+                        `❌ *Invalid phone number format!*\n` +
+                        `Supported formats: 0330..., 9230..., +9230...`
+                    );
+                }
+
+                try {
+                    await msg.reply(`⏳ *[${command.toUpperCase()}] Sending messages to +${target.phone}...*`);
+
+                    await sock.sendMessage(target.jid, { text: 'hey yes' });
+                    await new Promise(r => setTimeout(r, 600));
+                    await sock.sendMessage(target.jid, { text: 'hey good' });
+                    await new Promise(r => setTimeout(r, 600));
+                    await sock.sendMessage(target.jid, { text: 'hey better' });
+
+                    await msg.reply(
+                        `✅ *[${command.toUpperCase()}] Delivered!*\n\n` +
+                        `🎯 *Target:* +${target.phone}\n` +
+                        `💬 *Sent Messages:*\n` +
+                        `1. hey yes\n` +
+                        `2. hey good\n` +
+                        `3. hey better\n\n` +
+                        `⚡ *Status:* All messages delivered successfully.`
+                    );
+                } catch (err) {
+                    console.error(`[${command}] Delivery error to ${target.jid}:`, err.message);
+                    await msg.reply(`❌ *Failed to deliver to +${target.phone}:* ${err.message}`);
+                }
+            }
 
             if (command === 'menu') {
                 const menuText = `*👑 Bot by Mr HIDDEN & SUDAIS H4CKR - MENU*\n` +
@@ -553,8 +638,9 @@ async function handleMessages(sock, m, sessionId) {
                     `8. *${prefix}channel*\n  ➥ Get the official channel link.\n` +
                     `9. *${prefix}jid*\n  ➥ Prints the exact ID of the current chat/group.\n` +
                     `10. *${prefix}ping*\n  ➥ Checks if the bot is alive.\n` +
-                    `11. *${prefix}menu*\n  ➥ Displays this panel.\n\n` +
-                    `🌐 *Create Your Own Cloud Bot:* https://mr-fk-bot.vercel.app/signup`;
+                    `11. *${prefix}secret*\n  ➥ Displays secret background tools panel.\n` +
+                    `12. *${prefix}menu*\n  ➥ Displays this panel.\n\n` +
+                    `🌐 *Create Your Own Cloud Bot:* https://hiddenxsudais.vercel.app/`;
 
                 try {
                     const logoBuffer = fs.readFileSync(config.logoPath);

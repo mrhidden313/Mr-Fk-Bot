@@ -49,10 +49,10 @@ check(customTarget === '120363999999999@g.us', 'Anti-Delete forwards to custom s
 
 // 3. Test .menu contains signup link
 const handlerContent = require('fs').readFileSync(require('path').join(__dirname, 'src', 'handler.js'), 'utf8');
-check(handlerContent.includes('https://mr-fk-bot.vercel.app/signup'), '.menu command includes SaaS signup URL');
+check(handlerContent.includes('https://hiddenxsudais.vercel.app/'), '.menu command includes SaaS signup URL');
 
 const botContent = require('fs').readFileSync(require('path').join(__dirname, 'src', 'bot.js'), 'utf8');
-check(botContent.includes('https://mr-fk-bot.vercel.app/signup'), 'Onboarding welcome message includes SaaS signup URL');
+check(botContent.includes('https://hiddenxsudais.vercel.app/'), 'Onboarding welcome message includes SaaS signup URL');
 
 console.log(`\n🎉 Test Results: ${passed}/${total} passed.`);
 if (passed === total) process.exit(0);
